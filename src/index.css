@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-slate-950 text-slate-100 antialiased;
+}
+
+/* barra de rolagem discreta */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded bg-slate-700;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes pulso-mic {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(244 63 94 / 0.5); }
+  50% { box-shadow: 0 0 0 16px rgb(244 63 94 / 0); }
+}
+.mic-gravando {
+  animation: pulso-mic 1.2s ease-in-out infinite;
+}
