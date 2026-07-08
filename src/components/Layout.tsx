@@ -42,18 +42,18 @@ export default function Layout() {
 
   const linkCls = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-      isActive ? 'bg-sky-600/15 text-sky-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+      isActive ? 'bg-red-600/15 text-red-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
     }`
 
   return (
     <div className="flex min-h-dvh">
       {/* Sidebar (desktop) */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-slate-800 bg-slate-900 p-4 md:flex">
-        <div className="mb-6 flex items-center gap-2 px-2">
-          <img src="/icon.svg" alt="" className="h-8 w-8 rounded-lg" />
+        <div className="mb-6 flex items-center gap-2.5 px-2">
+          <img src="/icon-192.png" alt="Supreme" className="h-9 w-9 rounded-full" />
           <div>
-            <p className="text-sm font-bold leading-tight">Produção</p>
-            <p className="text-[11px] text-slate-500">Sistema interno</p>
+            <p className="text-sm font-bold uppercase leading-tight tracking-wider">Supreme</p>
+            <p className="text-[11px] text-slate-500">Dashboard de produção</p>
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1">
@@ -81,8 +81,8 @@ export default function Layout() {
         {/* Topo (mobile) */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur md:hidden">
           <div className="flex items-center gap-2">
-            <img src="/icon.svg" alt="" className="h-7 w-7 rounded-md" />
-            <span className="text-sm font-bold">Produção</span>
+            <img src="/icon-192.png" alt="Supreme" className="h-7 w-7 rounded-full" />
+            <span className="text-sm font-bold uppercase tracking-wider">Supreme</span>
           </div>
           <button onClick={() => void signOut()} className="text-xs text-rose-400">
             Sair
@@ -103,7 +103,7 @@ export default function Layout() {
             end={l.to === '/'}
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium ${
-                isActive ? 'text-sky-400' : 'text-slate-500'
+                isActive ? 'text-red-400' : 'text-slate-500'
               }`
             }
           >

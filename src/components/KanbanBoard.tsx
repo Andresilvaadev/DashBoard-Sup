@@ -21,12 +21,14 @@ export default function KanbanBoard({
   pedidos,
   etapas,
   ultrapassagens,
+  fotos,
   onEditar,
   onExcluir,
 }: {
   pedidos: Pedido[]
   etapas: Etapa[]
   ultrapassagens?: Record<string, number> // pedido.id → pedidos mais novos já à frente
+  fotos?: Record<string, string> // pedido.id → URL da primeira foto anexada
   onEditar?: (p: Pedido) => void // apenas admin
   onExcluir?: (p: Pedido) => void // apenas admin
 }) {
@@ -76,7 +78,7 @@ export default function KanbanBoard({
               onDragLeave={() => setColunaAlvo((c) => (c === etapa.id ? null : c))}
               onDrop={(e) => onDrop(e, etapa)}
               className={`flex max-h-[70dvh] w-64 shrink-0 snap-start flex-col rounded-xl border bg-slate-900/60 transition-colors ${
-                destacada ? 'border-sky-500 bg-sky-950/40' : 'border-slate-800'
+                destacada ? 'border-red-500 bg-red-950/40' : 'border-slate-800'
               }`}
             >
               {/* Cabeçalho da coluna */}
@@ -104,13 +106,25 @@ export default function KanbanBoard({
                         e.dataTransfer.setData('text/plain', String(p.numero))
                         e.dataTransfer.effectAllowed = 'move'
                       }}
-                      className={`group cursor-grab rounded-lg border border-slate-800 bg-slate-900 p-3 shadow-sm transition-colors hover:border-slate-600 active:cursor-grabbing ${
+                      className={`group cursor-grab overflow-hidden rounded-lg border border-slate-800 bg-slate-900 p-3 shadow-sm transition-colors hover:border-slate-600 active:cursor-grabbing ${
                         prioridadeBorda[p.prioridade]
                       } ${movendo === p.numero ? 'opacity-40' : ''}`}
                     >
+                      {/* Foto do pedido (primeira imagem anexada) */}
+                      {fotos?.[p.id] && (
+                        <Link to={`/pedidos/${p.numero}`} draggable={false} className="-mx-3 -mt-3 mb-2 block">
+                          <img
+                            src={fotos[p.id]}
+                            alt={`Foto do pedido ${p.numero}`}
+                            loading="lazy"
+                            draggable={false}
+                            className="h-28 w-full object-cover"
+                          />
+                        </Link>
+                      )}
                       <div className="flex items-start justify-between gap-2">
                         <Link to={`/pedidos/${p.numero}`} className="min-w-0">
-                          <p className="font-bold text-sky-400 hover:underline">#{p.numero}</p>
+                          <p className="font-bold text-red-400 hover:underline">#{p.numero}</p>
                           <p className="truncate text-xs font-medium text-slate-300">{p.cliente}</p>
                         </Link>
                         <div className="flex shrink-0 gap-1">
@@ -135,7 +149,7 @@ export default function KanbanBoard({
                           <button
                             onClick={() => setSeletor(p)}
                             title="Mover para outra etapa"
-                            className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-sky-400"
+                            className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-red-400"
                           >
                             ⇄
                           </button>
@@ -199,7 +213,7 @@ export default function KanbanBoard({
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-sm text-slate-400">
-              Mover <span className="font-bold text-sky-400">#{seletor.numero}</span> ({seletor.cliente}) para:
+              Mover <span className="font-bold text-red-400">#{seletor.numero}</span> ({seletor.cliente}) para:
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               {etapas.map((e) => (
@@ -208,7 +222,7 @@ export default function KanbanBoard({
                   disabled={e.id === seletor.etapa_atual_id || movendo !== null}
                   onClick={() => void mover(seletor.numero, e)}
                   className="rounded-lg border border-slate-700 px-3 py-2.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 disabled:opacity-30"
-                  style={e.id === seletor.etapa_atual_id ? { background: e.cor, color: '#0f172a' } : undefined}
+                  style={e.id === seletor.etapa_atual_id ? { background: e.cor, color: '#0b1233' } : undefined}
                 >
                   {e.ordem}. {e.nome}
                 </button>

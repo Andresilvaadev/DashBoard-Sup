@@ -4,6 +4,7 @@ const abas = [
   { to: '/admin', label: 'Funcionários', end: true },
   { to: '/admin/fluxo', label: 'Fluxo de produção' },
   { to: '/admin/metas', label: 'Metas diárias' },
+  { to: '/admin/sistema', label: 'Sistema' },
 ]
 
 export default function Admin() {
@@ -22,7 +23,7 @@ export default function Admin() {
             className={({ isActive }) =>
               `whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition-colors ${
                 isActive
-                  ? 'bg-sky-600 text-white'
+                  ? 'bg-red-600 text-white'
                   : 'border border-slate-700 text-slate-400 hover:bg-slate-800'
               }`
             }

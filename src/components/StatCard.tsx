@@ -5,7 +5,7 @@ export default function StatCard({
   valor,
   detalhe,
   icone,
-  cor = 'text-sky-400',
+  cor = 'text-red-400',
 }: {
   titulo: string
   valor: ReactNode

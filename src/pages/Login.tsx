@@ -25,9 +25,9 @@ export default function Login() {
     <div className="flex min-h-dvh items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <img src="/icon.svg" alt="" className="mx-auto h-16 w-16 rounded-2xl" />
-          <h1 className="mt-4 text-2xl font-bold">Dashboard de Produção</h1>
-          <p className="mt-1 text-sm text-slate-400">Sistema interno — acesso restrito</p>
+          <img src="/icon-512.png" alt="Supreme" className="mx-auto h-20 w-20 rounded-full" />
+          <h1 className="mt-4 text-3xl font-bold uppercase tracking-widest">Supreme</h1>
+          <p className="mt-1 text-sm text-slate-400">Dashboard de produção — acesso restrito</p>
         </div>
 
         {!supabaseConfigurado && (
@@ -44,7 +44,7 @@ export default function Login() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500"
             placeholder="voce@empresa.com"
           />
           <label className="mt-4 block text-xs font-medium text-slate-400">Senha</label>
@@ -53,14 +53,14 @@ export default function Login() {
             required
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500"
             placeholder="••••••••"
           />
           {erro && <p className="mt-3 text-sm text-rose-400">{erro}</p>}
           <button
             type="submit"
             disabled={enviando}
-            className="mt-5 w-full rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+            className="mt-5 w-full rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
           >
             {enviando ? 'Entrando…' : 'Entrar'}
           </button>

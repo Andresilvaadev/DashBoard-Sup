@@ -136,6 +136,17 @@ export default function Dashboard() {
     }
   }, [pedidos, etapasAtivas, historicoHoje, saidasHoje, metasHoje])
 
+  // linha do tempo: movimentações de etapa + cancelamentos, mais recentes primeiro
+  const eventos = useMemo(() => {
+    const movs = historicoRecente.map((h) => ({ tipo: 'mov' as const, quando: h.entrada, h }))
+    const cancelamentos = pedidos
+      .filter((p) => p.status === 'cancelado' && p.cancelado_em)
+      .map((p) => ({ tipo: 'cancelamento' as const, quando: p.cancelado_em!, p }))
+    return [...movs, ...cancelamentos]
+      .sort((a, b) => b.quando.localeCompare(a.quando))
+      .slice(0, 12)
+  }, [historicoRecente, pedidos])
+
   return (
     <div className="space-y-6">
       <div>
@@ -145,7 +156,7 @@ export default function Dashboard() {
 
       {/* Cards principais */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard titulo="Em andamento" valor={stats.emAndamento} cor="text-sky-400" />
+        <StatCard titulo="Em andamento" valor={stats.emAndamento} cor="text-red-400" />
         <StatCard titulo="Concluídos hoje" valor={stats.concluidosHoje} cor="text-emerald-400" />
         <StatCard
           titulo="Meta diária"
@@ -178,7 +189,7 @@ export default function Dashboard() {
           </div>
           <div className="h-3 overflow-hidden rounded-full bg-slate-800">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-sky-500 to-emerald-500 transition-all"
+              className="h-full rounded-full bg-gradient-to-r from-red-700 to-red-400 transition-all"
               style={{ width: `${Math.min(100, stats.pctMeta ?? 0)}%` }}
             />
           </div>
@@ -220,7 +231,7 @@ export default function Dashboard() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.porEtapa} margin={{ top: 5, right: 5, bottom: 5, left: -25 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
                 <XAxis
                   dataKey="nome"
                   tick={{ fill: '#94a3b8', fontSize: 10 }}
@@ -231,9 +242,9 @@ export default function Dashboard() {
                 />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
                 <Tooltip
-                  contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8 }}
+                  contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
                   labelStyle={{ color: '#e2e8f0' }}
-                  cursor={{ fill: '#1e293b' }}
+                  cursor={{ fill: '#1a2455' }}
                 />
                 <Bar dataKey="qtd" name="Pedidos" radius={[6, 6, 0, 0]}>
                   {stats.porEtapa.map((e, i) => (
@@ -267,7 +278,7 @@ export default function Dashboard() {
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-slate-800">
                       <div
-                        className="h-full rounded-full bg-sky-500"
+                        className="h-full rounded-full bg-red-500"
                         style={{ width: `${(f.qtd / max) * 100}%` }}
                       />
                     </div>
@@ -306,31 +317,49 @@ export default function Dashboard() {
         {/* Linha do tempo */}
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 lg:col-span-2">
           <h2 className="mb-3 text-sm font-semibold">Linha do tempo da produção</h2>
-          {historicoRecente.length === 0 ? (
+          {eventos.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-500">Sem movimentações ainda.</p>
           ) : (
             <ol className="relative space-y-4 border-l border-slate-800 pl-5">
-              {historicoRecente.map((h) => (
-                <li key={h.id} className="relative">
-                  <span
-                    className="absolute -left-[26px] top-1.5 h-3 w-3 rounded-full border-2 border-slate-900"
-                    style={{ background: h.etapa?.cor ?? '#38bdf8' }}
-                  />
-                  <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                    <Link
-                      to={`/pedidos/${h.pedido?.numero ?? ''}`}
-                      className="font-semibold text-sky-400 hover:underline"
-                    >
-                      #{h.pedido?.numero}
-                    </Link>
-                    <span className="text-slate-300">→ {h.etapa?.nome}</span>
-                    {h.via_voz && <span title="Via comando de voz">🎙️</span>}
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {h.funcionario?.nome ?? 'Sistema'} • {formatarDataHora(h.entrada)}
-                  </p>
-                </li>
-              ))}
+              {eventos.map((e) =>
+                e.tipo === 'mov' ? (
+                  <li key={`mov-${e.h.id}`} className="relative">
+                    <span
+                      className="absolute -left-[26px] top-1.5 h-3 w-3 rounded-full border-2 border-slate-900"
+                      style={{ background: e.h.etapa?.cor ?? '#ec1c24' }}
+                    />
+                    <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                      <Link
+                        to={`/pedidos/${e.h.pedido?.numero ?? ''}`}
+                        className="font-semibold text-red-400 hover:underline"
+                      >
+                        #{e.h.pedido?.numero}
+                      </Link>
+                      <span className="text-slate-300">→ {e.h.etapa?.nome}</span>
+                      {e.h.via_voz && <span title="Via comando de voz">🎙️</span>}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {e.h.funcionario?.nome ?? 'Sistema'} • {formatarDataHora(e.h.entrada)}
+                    </p>
+                  </li>
+                ) : (
+                  <li key={`cancel-${e.p.id}`} className="relative">
+                    <span className="absolute -left-[26px] top-1.5 h-3 w-3 rounded-full border-2 border-slate-900 bg-rose-500" />
+                    <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                      <Link
+                        to={`/pedidos/${e.p.numero}`}
+                        className="font-semibold text-red-400 hover:underline"
+                      >
+                        #{e.p.numero}
+                      </Link>
+                      <span className="font-medium text-rose-400">✕ Pedido cancelado</span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {e.p.cliente} • {formatarDataHora(e.p.cancelado_em)}
+                    </p>
+                  </li>
+                ),
+              )}
             </ol>
           )}
         </div>

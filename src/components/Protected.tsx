@@ -8,7 +8,7 @@ export function Protected({ children, somenteAdmin = false }: { children: ReactN
   if (loading) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
       </div>
     )
   }

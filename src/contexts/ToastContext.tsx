@@ -12,7 +12,7 @@ const Ctx = createContext<(msg: string, tipo?: Tipo) => void>(() => {})
 const cores: Record<Tipo, string> = {
   sucesso: 'bg-emerald-600',
   erro: 'bg-rose-600',
-  info: 'bg-sky-600',
+  info: 'bg-red-600',
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {

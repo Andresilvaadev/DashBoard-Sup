@@ -10,14 +10,14 @@ export default function Fluxo() {
   const { etapas, recarregar } = useEtapas()
   const [editando, setEditando] = useState<Etapa | 'nova' | null>(null)
   const [nome, setNome] = useState('')
-  const [cor, setCor] = useState('#38bdf8')
+  const [cor, setCor] = useState('#ec1c24')
   const [palavras, setPalavras] = useState('')
 
   const abrir = (e: Etapa | 'nova') => {
     setEditando(e)
     if (e === 'nova') {
       setNome('')
-      setCor('#38bdf8')
+      setCor('#ec1c24')
       setPalavras('')
     } else {
       setNome(e.nome)
@@ -81,7 +81,7 @@ export default function Fluxo() {
   }
 
   const inputCls =
-    'mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500'
+    'mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500'
 
   return (
     <div className="space-y-4">
@@ -91,7 +91,7 @@ export default function Fluxo() {
         </p>
         <button
           onClick={() => abrir('nova')}
-          className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-500"
+          className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
         >
           + Nova etapa
         </button>
@@ -109,7 +109,7 @@ export default function Fluxo() {
               <button
                 onClick={() => void mover(e, -1)}
                 disabled={i === 0}
-                className="text-slate-500 hover:text-sky-400 disabled:opacity-30"
+                className="text-slate-500 hover:text-red-400 disabled:opacity-30"
                 aria-label="Subir"
               >
                 ▲
@@ -117,7 +117,7 @@ export default function Fluxo() {
               <button
                 onClick={() => void mover(e, 1)}
                 disabled={i === etapas.length - 1}
-                className="text-slate-500 hover:text-sky-400 disabled:opacity-30"
+                className="text-slate-500 hover:text-red-400 disabled:opacity-30"
                 aria-label="Descer"
               >
                 ▼
@@ -139,7 +139,7 @@ export default function Fluxo() {
               </p>
             </div>
             <div className="flex shrink-0 gap-3 text-xs">
-              <button onClick={() => abrir(e)} className="text-slate-400 hover:text-sky-400">
+              <button onClick={() => abrir(e)} className="text-slate-400 hover:text-red-400">
                 Editar
               </button>
               <button onClick={() => void alternarAtivo(e)} className="text-slate-400 hover:text-amber-400">
@@ -196,7 +196,7 @@ export default function Fluxo() {
               </button>
               <button
                 type="submit"
-                className="flex-1 rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-500"
+                className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
               >
                 Salvar
               </button>

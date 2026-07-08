@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
-import type { Pedido, Prioridade } from '../types'
+import type { Pedido, Prioridade, StatusPedido } from '../types'
 
 /** Modal de criação/edição de pedido (apenas admin), com anexo de imagens/arquivos. */
 export default function PedidoFormModal({
@@ -20,6 +20,7 @@ export default function PedidoFormModal({
   const [descricao, setDescricao] = useState(pedido?.descricao ?? '')
   const [quantidade, setQuantidade] = useState(pedido?.quantidade?.toString() ?? '1')
   const [prioridade, setPrioridade] = useState<Prioridade>(pedido?.prioridade ?? 'normal')
+  const [status, setStatus] = useState<StatusPedido>(pedido?.status ?? 'em_andamento')
   const [dataPrevista, setDataPrevista] = useState(pedido?.data_prevista ?? '')
   const [arquivos, setArquivos] = useState<File[]>([])
   const [salvando, setSalvando] = useState(false)
@@ -39,8 +40,10 @@ export default function PedidoFormModal({
   }, [arquivos])
 
   const adicionarArquivos = (lista: FileList | null) => {
-    if (!lista) return
-    setArquivos((atual) => [...atual, ...Array.from(lista)])
+    if (!lista || lista.length === 0) return
+    // copia JÁ: o FileList é "vivo" e esvazia quando o input é limpo logo em seguida
+    const novos = Array.from(lista)
+    setArquivos((atual) => [...atual, ...novos])
   }
 
   const removerArquivo = (idx: number) => {
@@ -52,11 +55,14 @@ export default function PedidoFormModal({
     if (arquivos.length === 0) return true
     const { data: userData } = await supabase.auth.getUser()
     let falhas = 0
-    for (const file of arquivos) {
-      const path = `${numeroPedido}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`
+    let detalhe = ''
+    for (const [i, file] of arquivos.entries()) {
+      // índice no nome evita colisão quando vários arquivos sobem no mesmo milissegundo
+      const path = `${numeroPedido}/${Date.now()}-${i}-${file.name.replace(/[^\w.\-]/g, '_')}`
       const { error: upErr } = await supabase.storage.from('anexos').upload(path, file)
       if (upErr) {
         falhas++
+        detalhe = upErr.message
         continue
       }
       const { error } = await supabase.from('anexos').insert({
@@ -67,9 +73,12 @@ export default function PedidoFormModal({
         tamanho: file.size,
         uploaded_by: userData.user?.id,
       })
-      if (error) falhas++
+      if (error) {
+        falhas++
+        detalhe = error.message
+      }
     }
-    if (falhas > 0) toast(`${falhas} arquivo(s) não puderam ser anexados.`, 'erro')
+    if (falhas > 0) toast(`${falhas} arquivo(s) não puderam ser anexados: ${detalhe}`, 'erro')
     return falhas === 0
   }
 
@@ -89,6 +98,12 @@ export default function PedidoFormModal({
           descricao,
           quantidade: parseInt(quantidade, 10) || 1,
           prioridade,
+          status,
+          // concluído/cancelado manualmente ganham a data de agora; sair do status limpa
+          concluido_em:
+            status === 'concluido' ? (pedido.concluido_em ?? new Date().toISOString()) : null,
+          cancelado_em:
+            status === 'cancelado' ? (pedido.cancelado_em ?? new Date().toISOString()) : null,
           data_prevista: dataPrevista || null,
         })
         .eq('id', pedido.id))
@@ -102,7 +117,16 @@ export default function PedidoFormModal({
         p_data_prevista: dataPrevista || null,
       })
       error = res.error
-      pedidoId = (res.data as string | null) ?? null
+      pedidoId = typeof res.data === 'string' && res.data ? res.data : null
+      // fallback: se a função do banco não devolver o id, busca pelo número
+      if (!error && !pedidoId) {
+        const { data: criado } = await supabase
+          .from('pedidos')
+          .select('id')
+          .eq('numero', num)
+          .maybeSingle()
+        pedidoId = (criado?.id as string | undefined) ?? null
+      }
     }
 
     if (error) {
@@ -115,6 +139,8 @@ export default function PedidoFormModal({
     }
 
     if (pedidoId) await enviarAnexos(pedidoId, num)
+    else if (arquivos.length > 0)
+      toast('Pedido salvo, mas os anexos não puderam ser enviados. Anexe-os pela tela do pedido.', 'erro')
 
     setSalvando(false)
     toast(editando ? 'Pedido atualizado.' : `Pedido ${numero} criado.`, 'sucesso')
@@ -123,7 +149,7 @@ export default function PedidoFormModal({
   }
 
   const inputCls =
-    'mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500'
+    'mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500'
 
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-4 md:items-center">
@@ -197,6 +223,21 @@ export default function PedidoFormModal({
           </div>
         </div>
 
+        {editando && (
+          <div className="mt-3">
+            <label className="text-xs font-medium text-slate-400">Status</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as StatusPedido)}
+              className={inputCls}
+            >
+              <option value="em_andamento">Em andamento</option>
+              <option value="concluido">Concluído</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+        )}
+
         {/* Anexos: imagens, artes, PDFs */}
         <div className="mt-4">
           <label className="text-xs font-medium text-slate-400">
@@ -216,7 +257,7 @@ export default function PedidoFormModal({
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-600 py-3 text-sm text-slate-400 transition-colors hover:border-sky-500 hover:text-sky-400"
+            className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-600 py-3 text-sm text-slate-400 transition-colors hover:border-red-500 hover:text-red-400"
           >
             📷 Adicionar imagem ou arquivo
           </button>
@@ -264,7 +305,7 @@ export default function PedidoFormModal({
           <button
             type="submit"
             disabled={salvando}
-            className="flex-1 rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+            className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
           >
             {salvando ? 'Salvando…' : 'Salvar'}
           </button>

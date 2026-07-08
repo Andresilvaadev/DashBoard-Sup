@@ -31,6 +31,7 @@ export interface Pedido {
   etapa_atual_id: string | null
   data_prevista: string | null
   concluido_em: string | null
+  cancelado_em: string | null
   created_by: string | null
   created_at: string
   etapa_atual?: Etapa | null

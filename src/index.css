@@ -2,6 +2,23 @@
 
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Identidade Supreme: superfícies azul-marinho (substituem o slate padrão) */
+  --color-slate-950: #060b26;
+  --color-slate-900: #0b1233;
+  --color-slate-800: #1a2455;
+  --color-slate-700: #2a3670;
+  --color-slate-600: #46538f;
+  --color-slate-500: #6b77ad;
+  --color-slate-400: #9aa3cc;
+  --color-slate-300: #c2c8e4;
+  --color-slate-200: #dfe3f2;
+
+  /* Vermelho da marca (acento principal) */
+  --color-red-400: #f4555c;
+  --color-red-500: #ec1c24;
+  --color-red-600: #d3131b;
+  --color-red-700: #b10e15;
 }
 
 html {

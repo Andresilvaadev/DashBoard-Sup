@@ -67,14 +67,14 @@ export default function Funcionarios() {
   }
 
   const inputCls =
-    'mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500'
+    'mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500'
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
         <button
           onClick={() => setModalNovo(true)}
-          className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-500"
+          className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
         >
           + Cadastrar funcionário
         </button>
@@ -183,7 +183,7 @@ export default function Funcionarios() {
               <button
                 type="submit"
                 disabled={salvando}
-                className="flex-1 rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
               >
                 {salvando ? 'Criando…' : 'Cadastrar'}
               </button>

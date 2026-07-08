@@ -67,7 +67,7 @@ export default function Metas() {
           <select
             value={etapaId}
             onChange={(e) => setEtapaId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500"
           >
             <option value="">🎯 Geral — pedidos concluídos no dia</option>
             {etapasAtivas.map((e) => (
@@ -85,7 +85,7 @@ export default function Metas() {
               required
               value={data}
               onChange={(e) => setData(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500"
             />
           </div>
           <div>
@@ -96,14 +96,14 @@ export default function Metas() {
               min={1}
               value={quantidade}
               onChange={(e) => setQuantidade(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500"
             />
           </div>
         </div>
         <button
           type="submit"
           disabled={salvando}
-          className="mt-4 w-full rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+          className="mt-4 w-full rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
         >
           {salvando ? 'Salvando…' : 'Salvar meta'}
         </button>
@@ -121,14 +121,14 @@ export default function Metas() {
                 className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-2.5 text-sm"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className={m.data === hojeISO() ? 'shrink-0 font-semibold text-sky-400' : 'shrink-0'}>
+                  <span className={m.data === hojeISO() ? 'shrink-0 font-semibold text-red-400' : 'shrink-0'}>
                     {formatarData(m.data)}
                     {m.data === hojeISO() && ' (hoje)'}
                   </span>
                   {m.etapa_id ? (
                     <span
                       className="truncate rounded-full px-2 py-0.5 text-[11px] font-medium"
-                      style={{ background: `${m.etapa?.cor ?? '#38bdf8'}22`, color: m.etapa?.cor ?? '#38bdf8' }}
+                      style={{ background: `${m.etapa?.cor ?? '#ec1c24'}22`, color: m.etapa?.cor ?? '#ec1c24' }}
                     >
                       {m.etapa?.nome ?? 'Etapa removida'}
                     </span>

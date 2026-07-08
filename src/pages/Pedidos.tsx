@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import KanbanBoard from '../components/KanbanBoard'
 import PedidoFormModal from '../components/PedidoFormModal'
@@ -9,11 +9,12 @@ import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Pedido } from '../types'
 import { mapaUltrapassagens } from '../utils/fila'
+import { removerAnexosStorage } from '../utils/storage'
 import { formatarData, hojeISO } from '../utils/tempo'
 
 const prioridadeBadge: Record<string, string> = {
   baixa: 'bg-slate-700 text-slate-300',
-  normal: 'bg-sky-900 text-sky-300',
+  normal: 'bg-blue-900 text-blue-300',
   alta: 'bg-amber-900 text-amber-300',
   urgente: 'bg-rose-900 text-rose-300',
 }
@@ -40,6 +41,43 @@ export default function Pedidos() {
   // (calculado sobre TODOS os pedidos, não só os filtrados)
   const ultrapassagens = useMemo(() => mapaUltrapassagens(pedidos, etapas), [pedidos, etapas])
 
+  // pedido.id → URL assinada da primeira foto anexada (bucket é privado)
+  const [fotos, setFotos] = useState<Record<string, string>>({})
+  useEffect(() => {
+    let ativo = true
+    const carregarFotos = async () => {
+      const { data } = await supabase
+        .from('anexos')
+        .select('pedido_id, path')
+        .like('tipo', 'image/%')
+        .order('created_at', { ascending: true })
+      const primeiraPorPedido = new Map<string, string>()
+      for (const a of (data ?? []) as { pedido_id: string; path: string }[]) {
+        if (!primeiraPorPedido.has(a.pedido_id)) primeiraPorPedido.set(a.pedido_id, a.path)
+      }
+      if (primeiraPorPedido.size === 0) {
+        if (ativo) setFotos({})
+        return
+      }
+      const { data: assinadas } = await supabase.storage
+        .from('anexos')
+        .createSignedUrls([...primeiraPorPedido.values()], 3600)
+      const urlPorPath: Record<string, string> = {}
+      for (const s of assinadas ?? []) {
+        if (s.signedUrl && s.path) urlPorPath[s.path] = s.signedUrl
+      }
+      const mapa: Record<string, string> = {}
+      for (const [pedidoId, path] of primeiraPorPedido) {
+        if (urlPorPath[path]) mapa[pedidoId] = urlPorPath[path]
+      }
+      if (ativo) setFotos(mapa)
+    }
+    void carregarFotos()
+    return () => {
+      ativo = false
+    }
+  }, [pedidos])
+
   const filtrados = useMemo(() => {
     const q = busca.toLowerCase().trim()
     return pedidos.filter((p) => {
@@ -55,16 +93,17 @@ export default function Pedidos() {
   }, [pedidos, busca, filtroEtapa, filtroStatus])
 
   const excluir = async (p: Pedido) => {
-    if (!confirm(`Excluir o pedido ${p.numero} (${p.cliente})? O histórico será mantido.`)) return
-    const { error } = await supabase.from('pedidos').delete().eq('id', p.id)
-    if (error) {
-      toast(
-        error.message.includes('violates foreign key')
-          ? 'Este pedido tem histórico e não pode ser excluído (o histórico nunca é apagado). Você pode cancelá-lo editando o status.'
-          : error.message,
-        'erro',
+    if (
+      !confirm(
+        `Excluir DEFINITIVAMENTE o pedido ${p.numero} (${p.cliente})? O histórico e os anexos dele também serão apagados. Essa ação não pode ser desfeita.`,
       )
+    )
+      return
+    const { data, error } = await supabase.rpc('excluir_pedido', { p_numero: p.numero })
+    if (error) {
+      toast(error.message, 'erro')
     } else {
+      await removerAnexosStorage((data as string[]) ?? [])
       toast(`Pedido ${p.numero} excluído.`, 'sucesso')
       recarregar()
     }
@@ -72,7 +111,7 @@ export default function Pedidos() {
 
   const hoje = hojeISO()
   const inputCls =
-    'rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-sky-500'
+    'rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-red-500'
 
   return (
     <div className="space-y-4">
@@ -87,7 +126,7 @@ export default function Pedidos() {
             <button
               onClick={() => trocarVisao('kanban')}
               className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-                visao === 'kanban' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                visao === 'kanban' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               ▦ Kanban
@@ -95,7 +134,7 @@ export default function Pedidos() {
             <button
               onClick={() => trocarVisao('lista')}
               className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-                visao === 'lista' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                visao === 'lista' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               ☰ Lista
@@ -104,7 +143,7 @@ export default function Pedidos() {
           {isAdmin && (
             <button
               onClick={() => setModal('novo')}
-              className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-500"
+              className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
             >
               + Novo pedido
             </button>
@@ -142,6 +181,7 @@ export default function Pedidos() {
           pedidos={filtrados}
           etapas={etapasAtivas}
           ultrapassagens={ultrapassagens}
+          fotos={fotos}
           onEditar={isAdmin ? (p) => setModal(p) : undefined}
           onExcluir={isAdmin ? (p) => void excluir(p) : undefined}
         />
@@ -155,13 +195,24 @@ export default function Pedidos() {
           return (
             <div
               key={p.id}
-              className={`rounded-xl border bg-slate-900 p-4 transition-colors hover:border-slate-600 ${
+              className={`overflow-hidden rounded-xl border bg-slate-900 p-4 transition-colors hover:border-slate-600 ${
                 atrasado ? 'border-rose-800' : 'border-slate-800'
               }`}
             >
+              {/* Foto do pedido (primeira imagem anexada) */}
+              {fotos[p.id] && (
+                <Link to={`/pedidos/${p.numero}`} className="-mx-4 -mt-4 mb-3 block">
+                  <img
+                    src={fotos[p.id]}
+                    alt={`Foto do pedido ${p.numero}`}
+                    loading="lazy"
+                    className="h-40 w-full object-cover"
+                  />
+                </Link>
+              )}
               <div className="flex items-start justify-between gap-2">
                 <Link to={`/pedidos/${p.numero}`} className="min-w-0">
-                  <p className="text-lg font-bold text-sky-400 hover:underline">#{p.numero}</p>
+                  <p className="text-lg font-bold text-red-400 hover:underline">#{p.numero}</p>
                   <p className="truncate text-sm font-medium">{p.cliente}</p>
                   {p.descricao && <p className="truncate text-xs text-slate-500">{p.descricao}</p>}
                 </Link>
@@ -183,8 +234,8 @@ export default function Pedidos() {
                   <span
                     className="rounded-full px-2.5 py-1 font-medium"
                     style={{
-                      background: `${p.etapa_atual?.cor ?? '#38bdf8'}22`,
-                      color: p.etapa_atual?.cor ?? '#38bdf8',
+                      background: `${p.etapa_atual?.cor ?? '#ec1c24'}22`,
+                      color: p.etapa_atual?.cor ?? '#ec1c24',
                     }}
                   >
                     {p.etapa_atual?.nome ?? '—'}
@@ -210,7 +261,7 @@ export default function Pedidos() {
 
               {isAdmin && (
                 <div className="mt-3 flex gap-2 border-t border-slate-800 pt-3 text-xs">
-                  <button onClick={() => setModal(p)} className="text-slate-400 hover:text-sky-400">
+                  <button onClick={() => setModal(p)} className="text-slate-400 hover:text-red-400">
                     Editar
                   </button>
                   <button onClick={() => void excluir(p)} className="text-slate-400 hover:text-rose-400">

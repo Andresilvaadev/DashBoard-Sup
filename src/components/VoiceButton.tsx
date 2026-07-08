@@ -158,7 +158,7 @@ export default function VoiceButton() {
         className={`fixed bottom-20 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-xl transition-colors md:bottom-6 md:right-6 ${
           fase === 'gravando'
             ? 'mic-gravando bg-rose-600 text-white'
-            : 'bg-sky-600 text-white hover:bg-sky-500'
+            : 'bg-red-600 text-white hover:bg-red-500'
         }`}
       >
         {fase === 'salvando' ? (
@@ -211,7 +211,7 @@ export default function VoiceButton() {
               value={textoManual}
               onChange={(e) => setTextoManual(e.target.value)}
               placeholder="1234 corte"
-              className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
+              className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500"
             />
             <div className="mt-4 flex gap-3">
               <button
@@ -223,7 +223,7 @@ export default function VoiceButton() {
               </button>
               <button
                 type="submit"
-                className="flex-1 rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-500"
+                className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
               >
                 Executar
               </button>
@@ -238,7 +238,7 @@ export default function VoiceButton() {
             <p className="text-sm text-slate-400">Você disse:</p>
             <p className="mt-1 italic text-slate-300">"{comando.transcricao}"</p>
             <p className="mt-4 text-lg font-semibold">
-              Mover pedido <span className="text-sky-400">{comando.numero}</span> para{' '}
+              Mover pedido <span className="text-red-400">{comando.numero}</span> para{' '}
               <span style={{ color: comando.etapa?.cor }}>{comando.etapa?.nome}</span>?
             </p>
             <div className="mt-5 flex gap-3">

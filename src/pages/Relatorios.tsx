@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
@@ -7,7 +8,7 @@ import { useEtapas } from '../hooks/useEtapas'
 import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Pedido } from '../types'
 import type { TabelaExport } from '../utils/exportar'
-import { formatarDuracao } from '../utils/tempo'
+import { formatarData, formatarDataHora, formatarDuracao } from '../utils/tempo'
 
 type Periodo = 'semana' | 'mes' | 'semestre' | 'ano'
 
@@ -41,6 +42,10 @@ export default function Relatorios() {
   const [historico, setHistorico] = useState<Historico[]>([])
   const [metas, setMetas] = useState<Meta[]>([])
   const [carregando, setCarregando] = useState(true)
+  // qual lista de pedidos está aberta (clique nos cards de indicadores)
+  const [listaAberta, setListaAberta] = useState<
+    'iniciados' | 'concluidos' | 'emAndamento' | 'atrasados' | 'cancelados' | null
+  >(null)
 
   useEffect(() => {
     const inicio = inicioDoPeriodo(periodo).toISOString()
@@ -65,11 +70,22 @@ export default function Relatorios() {
     const inicio = inicioDoPeriodo(periodo)
     const inicioISO = inicio.toISOString()
 
-    const iniciados = pedidos.filter((p) => p.created_at >= inicioISO)
-    const concluidos = pedidos.filter((p) => p.concluido_em && p.concluido_em >= inicioISO)
-    const emAndamento = pedidos.filter((p) => p.status === 'em_andamento')
+    const iniciados = pedidos
+      .filter((p) => p.created_at >= inicioISO)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    const concluidos = pedidos
+      .filter((p) => p.concluido_em && p.concluido_em >= inicioISO)
+      .sort((a, b) => b.concluido_em!.localeCompare(a.concluido_em!))
+    const emAndamento = pedidos
+      .filter((p) => p.status === 'em_andamento')
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
     const hoje = new Date().toISOString().slice(0, 10)
-    const atrasados = emAndamento.filter((p) => p.data_prevista && p.data_prevista < hoje)
+    const atrasados = emAndamento
+      .filter((p) => p.data_prevista && p.data_prevista < hoje)
+      .sort((a, b) => a.data_prevista!.localeCompare(b.data_prevista!))
+    const cancelados = pedidos
+      .filter((p) => p.status === 'cancelado' && p.cancelado_em && p.cancelado_em >= inicioISO)
+      .sort((a, b) => b.cancelado_em!.localeCompare(a.cancelado_em!))
 
     // produção por etapa: PEDIDOS ÚNICOS com trabalho concluído na etapa.
     // Ir e voltar de etapa gera vários registros no histórico, mas o mesmo
@@ -141,10 +157,11 @@ export default function Relatorios() {
       }))
 
     return {
-      iniciados: iniciados.length,
-      concluidos: concluidos.length,
-      emAndamento: emAndamento.length,
-      atrasados: atrasados.length,
+      iniciados,
+      concluidos,
+      emAndamento,
+      atrasados,
+      cancelados,
       porEtapa,
       rankFunc,
       setorTop,
@@ -163,10 +180,11 @@ export default function Relatorios() {
       titulo: 'Produção Geral',
       colunas: ['Indicador', 'Valor'],
       linhas: [
-        ['Pedidos iniciados', rel.iniciados],
-        ['Pedidos concluídos', rel.concluidos],
-        ['Pedidos em andamento', rel.emAndamento],
-        ['Pedidos atrasados', rel.atrasados],
+        ['Pedidos iniciados', rel.iniciados.length],
+        ['Pedidos concluídos', rel.concluidos.length],
+        ['Pedidos em andamento', rel.emAndamento.length],
+        ['Pedidos atrasados', rel.atrasados.length],
+        ['Pedidos cancelados', rel.cancelados.length],
         ['Tempo médio de produção', formatarDuracao(rel.tempoMedioProducao)],
         ['Média diária de produção', rel.mediaDiaria.toFixed(1)],
         ['Meta do período', rel.totalMeta || '—'],
@@ -191,6 +209,20 @@ export default function Relatorios() {
       colunas: ['Funcionário', 'Etapas movimentadas'],
       linhas: rel.rankFunc.map(([nome, qtd]) => [nome, qtd]),
     },
+    ...(rel.cancelados.length > 0
+      ? [
+          {
+            titulo: 'Pedidos Cancelados',
+            colunas: ['Número', 'Cliente', 'Quantidade', 'Cancelado em'],
+            linhas: rel.cancelados.map((p) => [
+              p.numero,
+              p.cliente,
+              p.quantidade,
+              formatarDataHora(p.cancelado_em),
+            ]),
+          } as TabelaExport,
+        ]
+      : []),
   ]
 
   return (
@@ -230,7 +262,7 @@ export default function Relatorios() {
             onClick={() => setPeriodo(p.id)}
             className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
               periodo === p.id
-                ? 'bg-sky-600 text-white'
+                ? 'bg-red-600 text-white'
                 : 'border border-slate-700 text-slate-400 hover:bg-slate-800'
             }`}
           >
@@ -241,25 +273,113 @@ export default function Relatorios() {
 
       {carregando ? (
         <div className="flex justify-center py-20">
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
         </div>
       ) : (
         <>
-          {/* Produção geral */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard titulo="Iniciados" valor={rel.iniciados} cor="text-sky-400" />
-            <StatCard titulo="Concluídos" valor={rel.concluidos} cor="text-emerald-400" />
-            <StatCard titulo="Em andamento" valor={rel.emAndamento} cor="text-violet-400" />
-            <StatCard titulo="Atrasados" valor={rel.atrasados} cor={rel.atrasados > 0 ? 'text-rose-400' : 'text-slate-300'} />
+          {/* Produção geral — clique em um card para ver a lista de pedidos */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {(
+              [
+                { id: 'iniciados', titulo: 'Iniciados', lista: rel.iniciados, cor: 'text-red-400' },
+                { id: 'concluidos', titulo: 'Concluídos', lista: rel.concluidos, cor: 'text-emerald-400' },
+                { id: 'emAndamento', titulo: 'Em andamento', lista: rel.emAndamento, cor: 'text-violet-400' },
+                {
+                  id: 'atrasados',
+                  titulo: 'Atrasados',
+                  lista: rel.atrasados,
+                  cor: rel.atrasados.length > 0 ? 'text-rose-400' : 'text-slate-300',
+                },
+                { id: 'cancelados', titulo: 'Cancelados', lista: rel.cancelados, cor: 'text-rose-400' },
+              ] as const
+            ).map((c) => (
+              <div
+                key={c.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setListaAberta((v) => (v === c.id ? null : c.id))}
+                onKeyDown={(e) => e.key === 'Enter' && setListaAberta((v) => (v === c.id ? null : c.id))}
+                className={`cursor-pointer rounded-xl transition-shadow ${
+                  listaAberta === c.id ? 'ring-2 ring-red-500' : 'hover:ring-1 hover:ring-slate-600'
+                }`}
+              >
+                <StatCard
+                  titulo={c.titulo}
+                  valor={c.lista.length}
+                  detalhe={listaAberta === c.id ? 'clique para ocultar' : 'clique para ver a lista'}
+                  cor={c.cor}
+                />
+              </div>
+            ))}
           </div>
+
+          {/* Lista de pedidos do card selecionado */}
+          {listaAberta && (
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+              <h2 className="mb-3 text-sm font-semibold">
+                {
+                  {
+                    iniciados: 'Pedidos iniciados',
+                    concluidos: 'Pedidos concluídos',
+                    emAndamento: 'Pedidos em andamento',
+                    atrasados: 'Pedidos atrasados',
+                    cancelados: 'Pedidos cancelados',
+                  }[listaAberta]
+                }{' '}
+                — {labelPeriodo.toLowerCase()} ({rel[listaAberta].length})
+              </h2>
+              {rel[listaAberta].length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-500">Nenhum pedido nesta lista.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {rel[listaAberta].map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        to={`/pedidos/${p.numero}`}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 px-3 py-2.5 text-sm hover:border-slate-500"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="font-bold text-red-400">#{p.numero}</span>
+                          <span className="truncate">{p.cliente}</span>
+                          <span className="text-xs text-slate-500">{p.quantidade} un.</span>
+                          {(listaAberta === 'emAndamento' || listaAberta === 'atrasados') &&
+                            p.etapa_atual && (
+                              <span
+                                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                                style={{
+                                  background: `${p.etapa_atual.cor}22`,
+                                  color: p.etapa_atual.cor,
+                                }}
+                              >
+                                {p.etapa_atual.nome}
+                              </span>
+                            )}
+                        </span>
+                        <span
+                          className={`text-xs ${listaAberta === 'atrasados' ? 'font-medium text-rose-400' : 'text-slate-500'}`}
+                        >
+                          {listaAberta === 'iniciados' && `criado em ${formatarDataHora(p.created_at)}`}
+                          {listaAberta === 'concluidos' && `concluído em ${formatarDataHora(p.concluido_em)}`}
+                          {listaAberta === 'emAndamento' &&
+                            (p.data_prevista ? `entrega ${formatarData(p.data_prevista)}` : 'sem data de entrega')}
+                          {listaAberta === 'atrasados' && `entrega era ${formatarData(p.data_prevista)}`}
+                          {listaAberta === 'cancelados' && `cancelado em ${formatarDataHora(p.cancelado_em)}`}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard titulo="Tempo médio de produção" valor={formatarDuracao(rel.tempoMedioProducao)} cor="text-amber-400" />
-            <StatCard titulo="Média diária" valor={rel.mediaDiaria.toFixed(1)} detalhe="pedidos/dia" cor="text-sky-400" />
+            <StatCard titulo="Média diária" valor={rel.mediaDiaria.toFixed(1)} detalhe="pedidos/dia" cor="text-red-400" />
             <StatCard
               titulo="Meta atingida"
               valor={rel.pctMeta != null ? `${rel.pctMeta}%` : '—'}
-              detalhe={rel.totalMeta ? `${rel.concluidos} de ${rel.totalMeta}` : 'Sem metas no período'}
+              detalhe={rel.totalMeta ? `${rel.concluidos.length} de ${rel.totalMeta}` : 'Sem metas no período'}
               cor="text-violet-400"
             />
             <StatCard
@@ -281,18 +401,18 @@ export default function Relatorios() {
                   <AreaChart data={rel.evolucao} margin={{ top: 5, right: 5, bottom: 0, left: -25 }}>
                     <defs>
                       <linearGradient id="gradProd" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="#38bdf8" stopOpacity={0} />
+                        <stop offset="0%" stopColor="#ec1c24" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#ec1c24" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
                     <XAxis dataKey="rotulo" tick={{ fill: '#94a3b8', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
                     <Tooltip
-                      contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8 }}
+                      contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
                       labelStyle={{ color: '#e2e8f0' }}
                     />
-                    <Area type="monotone" dataKey="concluidos" name="Concluídos" stroke="#38bdf8" fill="url(#gradProd)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="concluidos" name="Concluídos" stroke="#ec1c24" fill="url(#gradProd)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
@@ -306,13 +426,13 @@ export default function Relatorios() {
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={rel.porEtapa} layout="vertical" margin={{ top: 0, right: 10, bottom: 0, left: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
                     <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
                     <YAxis type="category" dataKey="nome" width={90} tick={{ fill: '#94a3b8', fontSize: 10 }} />
                     <Tooltip
-                      contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8 }}
+                      contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
                       labelStyle={{ color: '#e2e8f0' }}
-                      cursor={{ fill: '#1e293b' }}
+                      cursor={{ fill: '#1a2455' }}
                     />
                     <Bar dataKey="qtd" name="Realizadas" radius={[0, 6, 6, 0]}>
                       {rel.porEtapa.map((e, i) => (

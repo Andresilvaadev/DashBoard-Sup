@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Anexo, Historico, Pedido } from '../types'
 import { pedidosQuePassaramNaFrente } from '../utils/fila'
+import { removerAnexosStorage } from '../utils/storage'
 import { formatarData, formatarDataHora, formatarDuracao, segundosDesde } from '../utils/tempo'
 
 export default function PedidoDetalhe() {
   const { numero } = useParams()
+  const navigate = useNavigate()
   const toast = useToast()
+  const { isAdmin } = useAuth()
   const { etapas, etapasAtivas } = useEtapas()
   const { pedidos: todosPedidos } = usePedidos()
   const [pedido, setPedido] = useState<Pedido | null>(null)
@@ -120,6 +124,45 @@ export default function PedidoDetalhe() {
     }
   }
 
+  const alterarStatus = async (status: 'cancelado' | 'em_andamento') => {
+    if (!pedido) return
+    const msg =
+      status === 'cancelado'
+        ? `Cancelar o pedido ${pedido.numero}? Ele sai do fluxo, mas o histórico é mantido e você pode reativá-lo depois.`
+        : `Reativar o pedido ${pedido.numero}? Ele volta para o fluxo de produção.`
+    if (!confirm(msg)) return
+    const { error } = await supabase
+      .from('pedidos')
+      .update({
+        status,
+        cancelado_em: status === 'cancelado' ? new Date().toISOString() : null,
+      })
+      .eq('id', pedido.id)
+    if (error) toast(error.message, 'erro')
+    else {
+      toast(status === 'cancelado' ? 'Pedido cancelado.' : 'Pedido reativado.', 'sucesso')
+      carregar()
+    }
+  }
+
+  const excluirPedido = async () => {
+    if (!pedido) return
+    if (
+      !confirm(
+        `Excluir DEFINITIVAMENTE o pedido ${pedido.numero} (${pedido.cliente})? O histórico e os anexos dele também serão apagados. Essa ação não pode ser desfeita.`,
+      )
+    )
+      return
+    const { data, error } = await supabase.rpc('excluir_pedido', { p_numero: pedido.numero })
+    if (error) {
+      toast(error.message, 'erro')
+      return
+    }
+    await removerAnexosStorage((data as string[]) ?? [])
+    toast(`Pedido ${pedido.numero} excluído.`, 'sucesso')
+    navigate('/pedidos')
+  }
+
   const baixarAnexo = async (a: Anexo) => {
     const { data, error } = await supabase.storage.from('anexos').createSignedUrl(a.path, 300)
     if (error || !data) {
@@ -132,7 +175,7 @@ export default function PedidoDetalhe() {
   if (carregando) {
     return (
       <div className="flex justify-center py-20">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
       </div>
     )
   }
@@ -141,7 +184,7 @@ export default function PedidoDetalhe() {
     return (
       <div className="py-20 text-center">
         <p className="text-slate-400">Pedido {numero} não encontrado.</p>
-        <Link to="/pedidos" className="mt-2 inline-block text-sm text-sky-400 hover:underline">
+        <Link to="/pedidos" className="mt-2 inline-block text-sm text-red-400 hover:underline">
           ← Voltar aos pedidos
         </Link>
       </div>
@@ -177,7 +220,7 @@ export default function PedidoDetalhe() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/pedidos" className="text-sm text-slate-400 hover:text-sky-400">
+        <Link to="/pedidos" className="text-sm text-slate-400 hover:text-red-400">
           ← Pedidos
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
@@ -186,12 +229,16 @@ export default function PedidoDetalhe() {
             <span className="rounded-full bg-emerald-900 px-3 py-1 text-xs font-medium text-emerald-300">
               ✓ Concluído
             </span>
+          ) : pedido.status === 'cancelado' ? (
+            <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-400">
+              Cancelado
+            </span>
           ) : (
             <span
               className="rounded-full px-3 py-1 text-xs font-medium"
               style={{
-                background: `${pedido.etapa_atual?.cor ?? '#38bdf8'}22`,
-                color: pedido.etapa_atual?.cor ?? '#38bdf8',
+                background: `${pedido.etapa_atual?.cor ?? '#ec1c24'}22`,
+                color: pedido.etapa_atual?.cor ?? '#ec1c24',
               }}
             >
               {pedido.etapa_atual?.nome}
@@ -204,6 +251,34 @@ export default function PedidoDetalhe() {
           {pedido.data_prevista && ` • entrega ${formatarData(pedido.data_prevista)}`}
         </p>
         {pedido.descricao && <p className="mt-1 text-sm text-slate-500">{pedido.descricao}</p>}
+
+        {/* Ações de admin: cancelar / reativar / excluir */}
+        {isAdmin && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {pedido.status === 'em_andamento' && (
+              <button
+                onClick={() => void alterarStatus('cancelado')}
+                className="rounded-lg border border-amber-800 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-950"
+              >
+                ⊘ Cancelar pedido
+              </button>
+            )}
+            {pedido.status === 'cancelado' && (
+              <button
+                onClick={() => void alterarStatus('em_andamento')}
+                className="rounded-lg border border-emerald-800 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-950"
+              >
+                ↻ Reativar pedido
+              </button>
+            )}
+            <button
+              onClick={() => void excluirPedido()}
+              className="rounded-lg border border-rose-900 px-3 py-1.5 text-xs font-medium text-rose-400 hover:bg-rose-950"
+            >
+              🗑 Excluir definitivamente
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Pedidos mais novos que passaram na frente deste */}
@@ -224,7 +299,7 @@ export default function PedidoDetalhe() {
               <Link
                 key={o.id}
                 to={`/pedidos/${o.numero}`}
-                className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-medium text-sky-400 hover:underline"
+                className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-medium text-red-400 hover:underline"
               >
                 #{o.numero} · {o.status === 'concluido' ? 'Concluído' : o.etapa_atual?.nome ?? '—'}
               </Link>
@@ -233,7 +308,8 @@ export default function PedidoDetalhe() {
         </div>
       )}
 
-      {/* Mover etapa */}
+      {/* Mover etapa (pedido cancelado não se move; reative antes) */}
+      {pedido.status !== 'cancelado' && (
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold">Mover para etapa</h2>
         <div className="flex flex-wrap gap-2">
@@ -257,6 +333,7 @@ export default function PedidoDetalhe() {
           })}
         </div>
       </div>
+      )}
 
       {/* Tempo somado em cada etapa */}
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
@@ -303,7 +380,7 @@ export default function PedidoDetalhe() {
               <li key={h.id} className="relative">
                 <span
                   className="absolute -left-[26px] top-1 h-3 w-3 rounded-full border-2 border-slate-900"
-                  style={{ background: h.etapa?.cor ?? '#38bdf8' }}
+                  style={{ background: h.etapa?.cor ?? '#ec1c24' }}
                 />
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="text-sm font-semibold">{h.etapa?.nome}</span>
@@ -361,7 +438,7 @@ export default function PedidoDetalhe() {
                         key={a.id}
                         onClick={() => setImagemAberta({ url: urlsImagens[a.path], nome: a.nome })}
                         title={a.nome}
-                        className="group relative overflow-hidden rounded-lg border border-slate-800 hover:border-sky-500"
+                        className="group relative overflow-hidden rounded-lg border border-slate-800 hover:border-red-500"
                       >
                         <img
                           src={urlsImagens[a.path]}
@@ -425,7 +502,7 @@ export default function PedidoDetalhe() {
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-sky-400 hover:bg-slate-700"
+              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-slate-700"
             >
               Abrir original
             </a>

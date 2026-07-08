@@ -12,6 +12,7 @@ import Admin from './pages/admin/Admin'
 import Fluxo from './pages/admin/Fluxo'
 import Funcionarios from './pages/admin/Funcionarios'
 import Metas from './pages/admin/Metas'
+import Sistema from './pages/admin/Sistema'
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
                 <Route index element={<Funcionarios />} />
                 <Route path="fluxo" element={<Fluxo />} />
                 <Route path="metas" element={<Metas />} />
+                <Route path="sistema" element={<Sistema />} />
               </Route>
             </Route>
           </Routes>
