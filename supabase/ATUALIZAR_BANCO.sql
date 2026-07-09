@@ -70,10 +70,11 @@ begin
 
   select coalesce(array_agg(path), '{}') into v_paths from public.anexos;
 
-  delete from public.historico;
-  delete from public.anexos;
-  delete from public.pedidos;
-  delete from public.metas;
+  -- WHERE obrigatório: a extensão safeupdate do Supabase bloqueia DELETE sem WHERE
+  delete from public.historico where id is not null;
+  delete from public.anexos where id is not null;
+  delete from public.pedidos where id is not null;
+  delete from public.metas where id is not null;
 
   return v_paths;
 end; $$;
@@ -162,6 +163,17 @@ begin
 
   return v_id;
 end; $$;
+
+-- ------------------------------------------------------------
+-- 5. STATUS "arquivado" (guardado sem ter terminado)
+-- ------------------------------------------------------------
+alter table public.pedidos drop constraint if exists pedidos_status_check;
+alter table public.pedidos
+  add constraint pedidos_status_check
+  check (status in ('em_andamento', 'concluido', 'cancelado', 'arquivado'));
+
+alter table public.pedidos
+  add column if not exists arquivado_em timestamptz;
 
 -- ------------------------------------------------------------
 -- Recarrega o cache de schema da API (resolve o erro

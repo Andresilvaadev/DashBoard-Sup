@@ -3,7 +3,9 @@ import Layout from './components/Layout'
 import { Protected } from './components/Protected'
 import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
+import Arquivo from './pages/Arquivo'
 import Dashboard from './pages/Dashboard'
+import Estoque from './pages/Estoque'
 import Login from './pages/Login'
 import PedidoDetalhe from './pages/PedidoDetalhe'
 import Pedidos from './pages/Pedidos'
@@ -31,6 +33,8 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/pedidos" element={<Pedidos />} />
               <Route path="/pedidos/:numero" element={<PedidoDetalhe />} />
+              <Route path="/arquivo" element={<Arquivo />} />
+              <Route path="/estoque" element={<Estoque />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route
                 path="/admin"

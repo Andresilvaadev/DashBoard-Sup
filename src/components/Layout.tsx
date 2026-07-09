@@ -17,9 +17,20 @@ const icones = {
       <path d="M9 5h6M9 5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 12h6M9 16h4" />
     </svg>
   ),
+  arquivo: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
+      <rect x="3" y="4" width="18" height="4" rx="1.5" />
+      <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4" />
+    </svg>
+  ),
   relatorios: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
       <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />
+    </svg>
+  ),
+  estoque: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
+      <path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10" />
     </svg>
   ),
   admin: (
@@ -36,7 +47,9 @@ export default function Layout() {
   const links = [
     { to: '/', label: 'Dashboard', icone: icones.dashboard },
     { to: '/pedidos', label: 'Pedidos', icone: icones.pedidos },
+    { to: '/arquivo', label: 'Arquivo', icone: icones.arquivo },
     { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
+    { to: '/estoque', label: 'Estoque', icone: icones.estoque },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icone: icones.admin }] : []),
   ]
 

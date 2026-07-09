@@ -44,7 +44,7 @@ export default function Relatorios() {
   const [carregando, setCarregando] = useState(true)
   // qual lista de pedidos está aberta (clique nos cards de indicadores)
   const [listaAberta, setListaAberta] = useState<
-    'iniciados' | 'concluidos' | 'emAndamento' | 'atrasados' | 'cancelados' | null
+    'iniciados' | 'concluidos' | 'emAndamento' | 'atrasados' | 'cancelados' | 'arquivados' | null
   >(null)
 
   useEffect(() => {
@@ -86,6 +86,10 @@ export default function Relatorios() {
     const cancelados = pedidos
       .filter((p) => p.status === 'cancelado' && p.cancelado_em && p.cancelado_em >= inicioISO)
       .sort((a, b) => b.cancelado_em!.localeCompare(a.cancelado_em!))
+    // arquivados = guardados sem terem sido concluídos (não contam como produção)
+    const arquivados = pedidos
+      .filter((p) => p.status === 'arquivado' && p.arquivado_em && p.arquivado_em >= inicioISO)
+      .sort((a, b) => b.arquivado_em!.localeCompare(a.arquivado_em!))
 
     // produção por etapa: PEDIDOS ÚNICOS com trabalho concluído na etapa.
     // Ir e voltar de etapa gera vários registros no histórico, mas o mesmo
@@ -162,6 +166,7 @@ export default function Relatorios() {
       emAndamento,
       atrasados,
       cancelados,
+      arquivados,
       porEtapa,
       rankFunc,
       setorTop,
@@ -184,6 +189,7 @@ export default function Relatorios() {
         ['Pedidos concluídos', rel.concluidos.length],
         ['Pedidos em andamento', rel.emAndamento.length],
         ['Pedidos atrasados', rel.atrasados.length],
+        ['Pedidos arquivados', rel.arquivados.length],
         ['Pedidos cancelados', rel.cancelados.length],
         ['Tempo médio de produção', formatarDuracao(rel.tempoMedioProducao)],
         ['Média diária de produção', rel.mediaDiaria.toFixed(1)],
@@ -278,7 +284,7 @@ export default function Relatorios() {
       ) : (
         <>
           {/* Produção geral — clique em um card para ver a lista de pedidos */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             {(
               [
                 { id: 'iniciados', titulo: 'Iniciados', lista: rel.iniciados, cor: 'text-red-400' },
@@ -290,6 +296,7 @@ export default function Relatorios() {
                   lista: rel.atrasados,
                   cor: rel.atrasados.length > 0 ? 'text-rose-400' : 'text-slate-300',
                 },
+                { id: 'arquivados', titulo: 'Arquivados', lista: rel.arquivados, cor: 'text-violet-300' },
                 { id: 'cancelados', titulo: 'Cancelados', lista: rel.cancelados, cor: 'text-rose-400' },
               ] as const
             ).map((c) => (
@@ -323,6 +330,7 @@ export default function Relatorios() {
                     concluidos: 'Pedidos concluídos',
                     emAndamento: 'Pedidos em andamento',
                     atrasados: 'Pedidos atrasados',
+                    arquivados: 'Pedidos arquivados',
                     cancelados: 'Pedidos cancelados',
                   }[listaAberta]
                 }{' '}
@@ -363,6 +371,7 @@ export default function Relatorios() {
                           {listaAberta === 'emAndamento' &&
                             (p.data_prevista ? `entrega ${formatarData(p.data_prevista)}` : 'sem data de entrega')}
                           {listaAberta === 'atrasados' && `entrega era ${formatarData(p.data_prevista)}`}
+                          {listaAberta === 'arquivados' && `arquivado em ${formatarDataHora(p.arquivado_em)}`}
                           {listaAberta === 'cancelados' && `cancelado em ${formatarDataHora(p.cancelado_em)}`}
                         </span>
                       </Link>

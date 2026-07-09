@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
 import type { Pedido, Prioridade, StatusPedido } from '../types'
+import { comprimirImagem } from '../utils/imagem'
 
 /** Modal de criação/edição de pedido (apenas admin), com anexo de imagens/arquivos. */
 export default function PedidoFormModal({
@@ -56,7 +57,9 @@ export default function PedidoFormModal({
     const { data: userData } = await supabase.auth.getUser()
     let falhas = 0
     let detalhe = ''
-    for (const [i, file] of arquivos.entries()) {
+    for (const [i, original] of arquivos.entries()) {
+      // comprime imagens antes de subir (economiza armazenamento e banda)
+      const file = await comprimirImagem(original)
       // índice no nome evita colisão quando vários arquivos sobem no mesmo milissegundo
       const path = `${numeroPedido}/${Date.now()}-${i}-${file.name.replace(/[^\w.\-]/g, '_')}`
       const { error: upErr } = await supabase.storage.from('anexos').upload(path, file)
@@ -99,11 +102,13 @@ export default function PedidoFormModal({
           quantidade: parseInt(quantidade, 10) || 1,
           prioridade,
           status,
-          // concluído/cancelado manualmente ganham a data de agora; sair do status limpa
+          // cada status ganha sua própria data ao ser aplicado; sair do status limpa
           concluido_em:
             status === 'concluido' ? (pedido.concluido_em ?? new Date().toISOString()) : null,
           cancelado_em:
             status === 'cancelado' ? (pedido.cancelado_em ?? new Date().toISOString()) : null,
+          arquivado_em:
+            status === 'arquivado' ? (pedido.arquivado_em ?? new Date().toISOString()) : null,
           data_prevista: dataPrevista || null,
         })
         .eq('id', pedido.id))
@@ -233,6 +238,7 @@ export default function PedidoFormModal({
             >
               <option value="em_andamento">Em andamento</option>
               <option value="concluido">Concluído</option>
+              <option value="arquivado">Arquivado (sem concluir)</option>
               <option value="cancelado">Cancelado</option>
             </select>
           </div>

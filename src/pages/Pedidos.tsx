@@ -26,7 +26,6 @@ export default function Pedidos() {
   const { etapas, etapasAtivas } = useEtapas()
   const [busca, setBusca] = useState('')
   const [filtroEtapa, setFiltroEtapa] = useState('')
-  const [filtroStatus, setFiltroStatus] = useState('')
   const [modal, setModal] = useState<'novo' | Pedido | null>(null)
   const [visao, setVisao] = useState<'kanban' | 'lista'>(
     () => (localStorage.getItem('pedidos-visao') as 'kanban' | 'lista') ?? 'kanban',
@@ -81,8 +80,10 @@ export default function Pedidos() {
   const filtrados = useMemo(() => {
     const q = busca.toLowerCase().trim()
     return pedidos.filter((p) => {
+      // Pedidos = produção do dia a dia (em andamento). Concluídos e
+      // cancelados ficam na aba Arquivo.
+      if (p.status !== 'em_andamento') return false
       if (filtroEtapa && p.etapa_atual_id !== filtroEtapa) return false
-      if (filtroStatus && p.status !== filtroStatus) return false
       if (!q) return true
       return (
         String(p.numero).includes(q) ||
@@ -90,7 +91,7 @@ export default function Pedidos() {
         p.descricao.toLowerCase().includes(q)
       )
     })
-  }, [pedidos, busca, filtroEtapa, filtroStatus])
+  }, [pedidos, busca, filtroEtapa])
 
   const excluir = async (p: Pedido) => {
     if (
@@ -166,12 +167,6 @@ export default function Pedidos() {
               {e.nome}
             </option>
           ))}
-        </select>
-        <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className={inputCls}>
-          <option value="">Todos status</option>
-          <option value="em_andamento">Em andamento</option>
-          <option value="concluido">Concluído</option>
-          <option value="cancelado">Cancelado</option>
         </select>
       </div>
 

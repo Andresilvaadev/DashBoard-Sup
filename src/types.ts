@@ -1,5 +1,5 @@
 export type Role = 'admin' | 'funcionario'
-export type StatusPedido = 'em_andamento' | 'concluido' | 'cancelado'
+export type StatusPedido = 'em_andamento' | 'concluido' | 'cancelado' | 'arquivado'
 export type Prioridade = 'baixa' | 'normal' | 'alta' | 'urgente'
 
 export interface Profile {
@@ -32,6 +32,7 @@ export interface Pedido {
   data_prevista: string | null
   concluido_em: string | null
   cancelado_em: string | null
+  arquivado_em: string | null
   created_by: string | null
   created_at: string
   etapa_atual?: Etapa | null
@@ -71,4 +72,20 @@ export interface Meta {
   etapa_id: string | null
   quantidade: number
   etapa?: Etapa | null
+}
+
+export interface EstoqueCategoria {
+  id: string
+  nome: string
+  ordem: number
+  created_at: string
+}
+
+export interface EstoqueItem {
+  id: string
+  categoria_id: string
+  nome: string
+  quantidade: number
+  ordem: number
+  created_at: string
 }

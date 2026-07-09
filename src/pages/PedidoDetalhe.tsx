@@ -5,8 +5,9 @@ import { useToast } from '../contexts/ToastContext'
 import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
-import type { Anexo, Historico, Pedido } from '../types'
+import type { Anexo, Historico, Pedido, StatusPedido } from '../types'
 import { pedidosQuePassaramNaFrente } from '../utils/fila'
+import { comprimirImagem } from '../utils/imagem'
 import { removerAnexosStorage } from '../utils/storage'
 import { formatarData, formatarDataHora, formatarDuracao, segundosDesde } from '../utils/tempo'
 
@@ -97,9 +98,11 @@ export default function PedidoDetalhe() {
     else toast('Etapa atualizada.', 'sucesso')
   }
 
-  const enviarArquivo = async (file: File) => {
+  const enviarArquivo = async (original: File) => {
     if (!pedido) return
     setEnviandoArquivo(true)
+    // comprime imagens antes de subir (economiza armazenamento e banda)
+    const file = await comprimirImagem(original)
     const path = `${pedido.numero}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`
     const { error: upErr } = await supabase.storage.from('anexos').upload(path, file)
     if (upErr) {
@@ -124,23 +127,35 @@ export default function PedidoDetalhe() {
     }
   }
 
-  const alterarStatus = async (status: 'cancelado' | 'em_andamento') => {
+  const alterarStatus = async (status: StatusPedido) => {
     if (!pedido) return
-    const msg =
-      status === 'cancelado'
-        ? `Cancelar o pedido ${pedido.numero}? Ele sai do fluxo, mas o histórico é mantido e você pode reativá-lo depois.`
-        : `Reativar o pedido ${pedido.numero}? Ele volta para o fluxo de produção.`
-    if (!confirm(msg)) return
+    const agora = new Date().toISOString()
+    const confirmacoes: Record<StatusPedido, string> = {
+      arquivado: `Arquivar o pedido ${pedido.numero}? Ele sai do fluxo e vai para o Arquivo SEM ser marcado como concluído. Você pode reativá-lo depois.`,
+      concluido: `Marcar o pedido ${pedido.numero} como concluído? Ele será registrado como entregue e movido para o Arquivo.`,
+      cancelado: `Cancelar o pedido ${pedido.numero}? Ele sai do fluxo, mas o histórico é mantido e você pode reativá-lo depois.`,
+      em_andamento: `Reativar o pedido ${pedido.numero}? Ele volta para o fluxo de produção.`,
+    }
+    const sucessos: Record<StatusPedido, string> = {
+      arquivado: 'Pedido arquivado.',
+      concluido: 'Pedido concluído.',
+      cancelado: 'Pedido cancelado.',
+      em_andamento: 'Pedido reativado.',
+    }
+    if (!confirm(confirmacoes[status])) return
     const { error } = await supabase
       .from('pedidos')
       .update({
         status,
-        cancelado_em: status === 'cancelado' ? new Date().toISOString() : null,
+        // cada status grava sua própria data; sair do status limpa
+        concluido_em: status === 'concluido' ? (pedido.concluido_em ?? agora) : null,
+        cancelado_em: status === 'cancelado' ? agora : null,
+        arquivado_em: status === 'arquivado' ? agora : null,
       })
       .eq('id', pedido.id)
     if (error) toast(error.message, 'erro')
     else {
-      toast(status === 'cancelado' ? 'Pedido cancelado.' : 'Pedido reativado.', 'sucesso')
+      toast(sucessos[status], 'sucesso')
       carregar()
     }
   }
@@ -229,6 +244,10 @@ export default function PedidoDetalhe() {
             <span className="rounded-full bg-emerald-900 px-3 py-1 text-xs font-medium text-emerald-300">
               ✓ Concluído
             </span>
+          ) : pedido.status === 'arquivado' ? (
+            <span className="rounded-full bg-violet-900 px-3 py-1 text-xs font-medium text-violet-300">
+              📥 Arquivado
+            </span>
           ) : pedido.status === 'cancelado' ? (
             <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-400">
               Cancelado
@@ -252,18 +271,32 @@ export default function PedidoDetalhe() {
         </p>
         {pedido.descricao && <p className="mt-1 text-sm text-slate-500">{pedido.descricao}</p>}
 
-        {/* Ações de admin: cancelar / reativar / excluir */}
+        {/* Ações de admin: arquivar / cancelar / reativar / excluir */}
         {isAdmin && (
           <div className="mt-3 flex flex-wrap gap-2">
             {pedido.status === 'em_andamento' && (
-              <button
-                onClick={() => void alterarStatus('cancelado')}
-                className="rounded-lg border border-amber-800 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-950"
-              >
-                ⊘ Cancelar pedido
-              </button>
+              <>
+                <button
+                  onClick={() => void alterarStatus('concluido')}
+                  className="rounded-lg border border-emerald-800 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-950"
+                >
+                  ✓ Concluir pedido
+                </button>
+                <button
+                  onClick={() => void alterarStatus('arquivado')}
+                  className="rounded-lg border border-violet-800 px-3 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-950"
+                >
+                  📥 Arquivar sem concluir
+                </button>
+                <button
+                  onClick={() => void alterarStatus('cancelado')}
+                  className="rounded-lg border border-amber-800 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-950"
+                >
+                  ⊘ Cancelar pedido
+                </button>
+              </>
             )}
-            {pedido.status === 'cancelado' && (
+            {pedido.status !== 'em_andamento' && (
               <button
                 onClick={() => void alterarStatus('em_andamento')}
                 className="rounded-lg border border-emerald-800 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-950"
@@ -308,8 +341,8 @@ export default function PedidoDetalhe() {
         </div>
       )}
 
-      {/* Mover etapa (pedido cancelado não se move; reative antes) */}
-      {pedido.status !== 'cancelado' && (
+      {/* Mover etapa (pedido cancelado/arquivado não se move; reative antes) */}
+      {pedido.status !== 'cancelado' && pedido.status !== 'arquivado' && (
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold">Mover para etapa</h2>
         <div className="flex flex-wrap gap-2">
