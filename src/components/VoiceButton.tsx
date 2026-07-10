@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
 import { useEtapas } from '../hooks/useEtapas'
-import { interpretarComando, type ComandoVoz } from '../utils/voz'
+import {
+  interpretarComando,
+  interpretarComandoEstoque,
+  type ComandoEstoque,
+  type ComandoVoz,
+  type ItemEstoqueVoz,
+} from '../utils/voz'
+
+type Modo = 'pedidos' | 'estoque'
 
 type Fase = 'ocioso' | 'gravando' | 'confirmando' | 'salvando' | 'digitando'
 
@@ -24,16 +33,27 @@ const MENSAGENS_ERRO: Record<string, string> = {
  */
 export default function VoiceButton() {
   const toast = useToast()
+  const { pathname } = useLocation()
   const { etapasAtivas } = useEtapas()
   const [fase, setFase] = useState<Fase>('ocioso')
   const [comando, setComando] = useState<ComandoVoz | null>(null)
+  const [comandoEstoque, setComandoEstoque] = useState<ComandoEstoque | null>(null)
   const [textoManual, setTextoManual] = useState('')
   const [suportado, setSuportado] = useState(true)
   const recRef = useRef<SpeechRecognition | null>(null)
 
+  // o microfone só aparece (e age) nas telas em que é usado
+  const modo: Modo | null = pathname.startsWith('/estoque')
+    ? 'estoque'
+    : pathname.startsWith('/pedidos')
+      ? 'pedidos'
+      : null
+
   // refs estáveis para uso dentro dos callbacks do reconhecedor
   const etapasRef = useRef(etapasAtivas)
   etapasRef.current = etapasAtivas
+  const modoRef = useRef(modo)
+  modoRef.current = modo
   const toastRef = useRef(toast)
   toastRef.current = toast
 
@@ -54,7 +74,7 @@ export default function VoiceButton() {
     rec.onresult = (ev) => {
       const alt = ev.results[0]?.[0]
       if (!alt) return
-      processar(alt.transcript, alt.confidence ?? 0)
+      void processar(alt.transcript, alt.confidence ?? 0)
     }
     rec.onerror = (ev) => {
       if (ev.error === 'aborted') {
@@ -84,8 +104,26 @@ export default function VoiceButton() {
   }, [])
 
   /** Interpreta o texto (falado ou digitado) e salva ou pede confirmação */
-  function processar(texto: string, confidence: number) {
+  async function processar(texto: string, confidence: number) {
+    if (modoRef.current === 'estoque') {
+      // busca os itens atuais e interpreta a baixa
+      const { data } = await supabase.from('estoque_itens').select('id, nome, quantidade')
+      const cmd = interpretarComandoEstoque(texto, confidence, (data as ItemEstoqueVoz[]) ?? [])
+      setComando(null)
+      setComandoEstoque(cmd)
+      if (!cmd.item) {
+        setFase('ocioso')
+        toastRef.current('Não entendi qual item. Diga por ex.: "usei um dry fit titânio".', 'info')
+        return
+      }
+      if (cmd.confiavel) void aplicarEstoque(cmd)
+      else setFase('confirmando')
+      return
+    }
+
+    // pedidos
     const cmd = interpretarComando(texto, confidence, etapasRef.current)
+    setComandoEstoque(null)
     setComando(cmd)
     if (!cmd.numero || !cmd.etapa) {
       setFase('ocioso')
@@ -95,6 +133,24 @@ export default function VoiceButton() {
       void salvar(cmd)
     } else {
       setFase('confirmando')
+    }
+  }
+
+  async function aplicarEstoque(cmd: ComandoEstoque) {
+    if (!cmd.item) return
+    setFase('salvando')
+    const delta = cmd.operacao === 'adicionar' ? cmd.quantidade : -cmd.quantidade
+    const { data, error } = await supabase.rpc('ajustar_estoque', {
+      p_item_id: cmd.item.id,
+      p_delta: delta,
+    })
+    setFase('ocioso')
+    setComandoEstoque(null)
+    if (error) {
+      toastRef.current(error.message, 'erro')
+    } else {
+      const verbo = cmd.operacao === 'adicionar' ? 'entrada de' : 'baixa de'
+      toastRef.current(`${cmd.item.nome}: ${verbo} ${cmd.quantidade} (agora ${Number(data)})`, 'sucesso')
     }
   }
 
@@ -132,6 +188,7 @@ export default function VoiceButton() {
       setFase('ocioso')
     } else if (fase === 'ocioso') {
       setComando(null)
+      setComandoEstoque(null)
       try {
         recRef.current.start()
         setFase('gravando')
@@ -147,8 +204,15 @@ export default function VoiceButton() {
     if (!texto) return
     setTextoManual('')
     // digitado tem confiança máxima, mas ainda confirma se faltar número/etapa
-    processar(texto, 1)
+    void processar(texto, 1)
   }
+
+  // fora de Pedidos e Estoque o microfone não aparece
+  if (!modo) return null
+
+  const exemplo = modo === 'estoque' ? 'usei um dry fit titânio' : '1234 corte'
+  const exemplo2 =
+    modo === 'estoque' ? 'comprei cinco dry fit titânio' : 'pedido 1234 foi para costura'
 
   return (
     <>
@@ -175,7 +239,7 @@ export default function VoiceButton() {
 
       {fase === 'gravando' && (
         <div className="fixed bottom-36 right-4 z-50 rounded-lg bg-slate-800 px-4 py-2 text-sm shadow-lg md:bottom-24 md:right-6">
-          🎙️ Ouvindo… fale por ex. <span className="font-semibold">"1234 corte"</span>
+          🎙️ Ouvindo… fale por ex. <span className="font-semibold">"{exemplo}"</span>
         </div>
       )}
 
@@ -203,14 +267,14 @@ export default function VoiceButton() {
           >
             <p className="text-sm font-semibold">Digite o comando</p>
             <p className="mt-1 text-xs text-slate-500">
-              Ex.: <span className="font-medium text-slate-300">1234 corte</span> ou{' '}
-              <span className="font-medium text-slate-300">pedido 1234 foi para costura</span>
+              Ex.: <span className="font-medium text-slate-300">{exemplo}</span> ou{' '}
+              <span className="font-medium text-slate-300">{exemplo2}</span>
             </p>
             <input
               autoFocus
               value={textoManual}
               onChange={(e) => setTextoManual(e.target.value)}
-              placeholder="1234 corte"
+              placeholder={exemplo}
               className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500"
             />
             <div className="mt-4 flex gap-3">
@@ -256,6 +320,45 @@ export default function VoiceButton() {
                 className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
               >
                 Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação da baixa de estoque */}
+      {fase === 'confirmando' && comandoEstoque?.item && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-4 md:items-center">
+          <div className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+            <p className="text-sm text-slate-400">Você disse:</p>
+            <p className="mt-1 italic text-slate-300">"{comandoEstoque.transcricao}"</p>
+            <p className="mt-4 text-lg font-semibold">
+              {comandoEstoque.operacao === 'adicionar' ? 'Adicionar' : 'Dar baixa de'}{' '}
+              <span className="text-red-400">{comandoEstoque.quantidade}</span> em{' '}
+              <span className="text-violet-300">{comandoEstoque.item.nome}</span>?
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Em estoque agora: {comandoEstoque.item.quantidadeAtual} →{' '}
+              {comandoEstoque.operacao === 'adicionar' ? 'ficará' : 'restará'}{' '}
+              {comandoEstoque.operacao === 'adicionar'
+                ? comandoEstoque.item.quantidadeAtual + comandoEstoque.quantidade
+                : Math.max(0, comandoEstoque.item.quantidadeAtual - comandoEstoque.quantidade)}
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => {
+                  setFase('ocioso')
+                  setComandoEstoque(null)
+                }}
+                className="flex-1 rounded-lg border border-slate-700 py-2.5 text-sm font-medium hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => void aplicarEstoque(comandoEstoque)}
+                className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
+              >
+                {comandoEstoque.operacao === 'adicionar' ? 'Confirmar entrada' : 'Confirmar baixa'}
               </button>
             </div>
           </div>

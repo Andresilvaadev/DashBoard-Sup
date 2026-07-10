@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
 import type { Pedido, Prioridade, StatusPedido } from '../types'
+import { enviarAnexo } from '../lib/anexos'
 import { comprimirImagem } from '../utils/imagem'
 
 /** Modal de criação/edição de pedido (apenas admin), com anexo de imagens/arquivos. */
@@ -57,15 +58,15 @@ export default function PedidoFormModal({
     const { data: userData } = await supabase.auth.getUser()
     let falhas = 0
     let detalhe = ''
-    for (const [i, original] of arquivos.entries()) {
+    for (const original of arquivos) {
       // comprime imagens antes de subir (economiza armazenamento e banda)
       const file = await comprimirImagem(original)
-      // índice no nome evita colisão quando vários arquivos sobem no mesmo milissegundo
-      const path = `${numeroPedido}/${Date.now()}-${i}-${file.name.replace(/[^\w.\-]/g, '_')}`
-      const { error: upErr } = await supabase.storage.from('anexos').upload(path, file)
-      if (upErr) {
+      let path: string
+      try {
+        path = await enviarAnexo(file, numeroPedido)
+      } catch (e) {
         falhas++
-        detalhe = upErr.message
+        detalhe = e instanceof Error ? e.message : 'falha no upload'
         continue
       }
       const { error } = await supabase.from('anexos').insert({

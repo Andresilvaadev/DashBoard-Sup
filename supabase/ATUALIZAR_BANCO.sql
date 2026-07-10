@@ -91,6 +91,13 @@ create or replace function public.mover_pedido(
   p_etapa_id uuid,
   p_observacao text default '',
   p_via_voz boolean default false
+)
+returns json language plpgsql security definer set search_path = public as $$
+declare
+  v_pedido public.pedidos%rowtype;
+  v_etapa public.etapas%rowtype;
+  v_ultima_ordem int;
+  v_uid uuid := auth.uid();
 begin
   if v_uid is null then
     raise exception 'Não autenticado';

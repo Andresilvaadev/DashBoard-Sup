@@ -8,6 +8,7 @@ import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Pedido } from '../types'
+import { urlsAnexos } from '../lib/anexos'
 import { mapaUltrapassagens } from '../utils/fila'
 import { removerAnexosStorage } from '../utils/storage'
 import { formatarData, hojeISO } from '../utils/tempo'
@@ -58,13 +59,8 @@ export default function Pedidos() {
         if (ativo) setFotos({})
         return
       }
-      const { data: assinadas } = await supabase.storage
-        .from('anexos')
-        .createSignedUrls([...primeiraPorPedido.values()], 3600)
-      const urlPorPath: Record<string, string> = {}
-      for (const s of assinadas ?? []) {
-        if (s.signedUrl && s.path) urlPorPath[s.path] = s.signedUrl
-      }
+      // miniaturas (Cloudinary ou URL assinada do Storage)
+      const urlPorPath = await urlsAnexos([...primeiraPorPedido.values()], { miniatura: true })
       const mapa: Record<string, string> = {}
       for (const [pedidoId, path] of primeiraPorPedido) {
         if (urlPorPath[path]) mapa[pedidoId] = urlPorPath[path]

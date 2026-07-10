@@ -6,6 +6,7 @@ import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Anexo, Historico, Pedido, StatusPedido } from '../types'
+import { enviarAnexo, urlAnexo, urlsAnexos } from '../lib/anexos'
 import { pedidosQuePassaramNaFrente } from '../utils/fila'
 import { comprimirImagem } from '../utils/imagem'
 import { removerAnexosStorage } from '../utils/storage'
@@ -53,20 +54,9 @@ export default function PedidoDetalhe() {
       const listaAnexos = (a.data as Anexo[]) ?? []
       setAnexos(listaAnexos)
 
-      // gera URLs assinadas (1h) para as miniaturas das imagens
+      // miniaturas das imagens (Cloudinary ou URL assinada do Storage)
       const pathsImagens = listaAnexos.filter((x) => x.tipo.startsWith('image/')).map((x) => x.path)
-      if (pathsImagens.length > 0) {
-        const { data: assinadas } = await supabase.storage
-          .from('anexos')
-          .createSignedUrls(pathsImagens, 3600)
-        const mapa: Record<string, string> = {}
-        for (const item of assinadas ?? []) {
-          if (item.signedUrl && item.path) mapa[item.path] = item.signedUrl
-        }
-        setUrlsImagens(mapa)
-      } else {
-        setUrlsImagens({})
-      }
+      setUrlsImagens(pathsImagens.length > 0 ? await urlsAnexos(pathsImagens, { miniatura: true }) : {})
     }
     setCarregando(false)
   }
@@ -103,11 +93,12 @@ export default function PedidoDetalhe() {
     setEnviandoArquivo(true)
     // comprime imagens antes de subir (economiza armazenamento e banda)
     const file = await comprimirImagem(original)
-    const path = `${pedido.numero}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`
-    const { error: upErr } = await supabase.storage.from('anexos').upload(path, file)
-    if (upErr) {
+    let path: string
+    try {
+      path = await enviarAnexo(file, pedido.numero)
+    } catch (e) {
       setEnviandoArquivo(false)
-      toast(`Falha no upload: ${upErr.message}`, 'erro')
+      toast(`Falha no upload: ${e instanceof Error ? e.message : ''}`, 'erro')
       return
     }
     const { data: userData } = await supabase.auth.getUser()
@@ -179,12 +170,12 @@ export default function PedidoDetalhe() {
   }
 
   const baixarAnexo = async (a: Anexo) => {
-    const { data, error } = await supabase.storage.from('anexos').createSignedUrl(a.path, 300)
-    if (error || !data) {
+    const url = await urlAnexo(a.path)
+    if (!url) {
       toast('Não foi possível abrir o arquivo.', 'erro')
       return
     }
-    window.open(data.signedUrl, '_blank')
+    window.open(url, '_blank')
   }
 
   if (carregando) {
