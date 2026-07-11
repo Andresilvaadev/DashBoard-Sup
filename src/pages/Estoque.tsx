@@ -274,7 +274,7 @@ export default function Estoque() {
                         title="Excluir categoria"
                         className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:text-rose-400"
                       >
-                        🗑
+                        ✕
                       </button>
                     </div>
                   )}
@@ -331,7 +331,7 @@ export default function Estoque() {
                                 {fmtQtd(it.quantidade)}
                               </span>
                             )}
-                            {/* + aumentar e 🗑 excluir: só admin */}
+                            {/* + aumentar e ✕ excluir: só admin */}
                             {isAdmin && (
                               <>
                                 <button
@@ -345,7 +345,7 @@ export default function Estoque() {
                                   title="Excluir item"
                                   className="ml-1 h-7 w-7 rounded-md bg-slate-800 text-slate-400 hover:text-rose-400"
                                 >
-                                  🗑
+                                  ✕
                                 </button>
                               </>
                             )}

@@ -192,7 +192,7 @@ export default function Sistema() {
 
       {/* Liberar espaço: apaga as fotos dos concluídos, mantendo os registros */}
       <div className="rounded-xl border border-amber-900/60 bg-amber-950/20 p-5">
-        <h2 className="text-sm font-semibold text-amber-300">🧹 Liberar espaço</h2>
+        <h2 className="text-sm font-semibold text-amber-300">Liberar espaço</h2>
         <p className="mt-2 text-sm text-slate-400">
           Apaga as{' '}
           <span className="font-semibold text-slate-300">fotos dos pedidos finalizados</span>{' '}
@@ -215,7 +215,7 @@ export default function Sistema() {
       </div>
 
       <div className="rounded-xl border border-rose-900/60 bg-rose-950/20 p-5">
-        <h2 className="text-sm font-semibold text-rose-300">⚠️ Zona de perigo</h2>
+        <h2 className="text-sm font-semibold text-rose-300">Zona de perigo</h2>
         <p className="mt-2 text-sm text-slate-400">
           <span className="font-semibold text-slate-300">Zerar produção</span> apaga
           definitivamente todos os pedidos, o histórico completo, os anexos e as metas — o

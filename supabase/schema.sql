@@ -35,20 +35,34 @@ create table if not exists public.etapas (
   cor text not null default '#38bdf8',
   palavras_chave text[] not null default '{}',  -- usadas pelo comando de voz
   ativo boolean not null default true,
+  -- 'producao' = aba Pedidos; 'criacao' = aba Pedidos para criação (arte)
+  fluxo text not null default 'producao' check (fluxo in ('producao','criacao')),
   created_at timestamptz not null default now()
 );
 
-insert into public.etapas (nome, ordem, cor, palavras_chave) values
-  ('Pedido criado', 1, '#94a3b8', array['criado','novo','pedido criado']),
-  ('Arte',          2, '#f472b6', array['arte','design']),
-  ('Ficha técnica', 3, '#a78bfa', array['ficha','ficha tecnica']),
-  ('Impressão',     4, '#818cf8', array['impressao','imprimir','impresso']),
-  ('Corte',         5, '#38bdf8', array['corte','cortar','cortado']),
-  ('Prensagem',     6, '#f59e0b', array['prensagem','prensa','prensar','prensado']),
-  ('Costura',       7, '#fb923c', array['costura','costurar','costurado']),
-  ('Embalagem',     8, '#34d399', array['embalagem','embalar','embalado']),
-  ('Entregue',      9, '#22c55e', array['entregue','entrega','finalizado','concluido'])
-on conflict do nothing;
+-- Seeds das etapas (só insere se o fluxo ainda estiver vazio — seguro re-rodar)
+do $$ begin
+  if not exists (select 1 from public.etapas where fluxo = 'producao') then
+    insert into public.etapas (nome, ordem, cor, palavras_chave) values
+      ('Pedido criado', 1, '#94a3b8', array['criado','novo','pedido criado']),
+      ('Arte',          2, '#f472b6', array['arte','design']),
+      ('Ficha técnica', 3, '#a78bfa', array['ficha','ficha tecnica']),
+      ('Impressão',     4, '#818cf8', array['impressao','imprimir','impresso']),
+      ('Corte',         5, '#38bdf8', array['corte','cortar','cortado']),
+      ('Prensagem',     6, '#f59e0b', array['prensagem','prensa','prensar','prensado']),
+      ('Costura',       7, '#fb923c', array['costura','costurar','costurado']),
+      ('Embalagem',     8, '#34d399', array['embalagem','embalar','embalado']),
+      ('Entregue',      9, '#22c55e', array['entregue','entrega','finalizado','concluido']);
+  end if;
+  -- etapas iniciais do fluxo de criação de arte (aba Criação)
+  if not exists (select 1 from public.etapas where fluxo = 'criacao') then
+    insert into public.etapas (nome, ordem, cor, palavras_chave, fluxo) values
+      ('Aguardando criação', 1, '#94a3b8', array['aguardando'],           'criacao'),
+      ('Em criação',         2, '#f472b6', array['criando','em criacao'], 'criacao'),
+      ('Em aprovação',       3, '#a78bfa', array['aprovacao'],            'criacao'),
+      ('Arte aprovada',      4, '#34d399', array['aprovada','aprovado'],  'criacao');
+  end if;
+end $$;
 
 -- ---------- PEDIDOS ----------
 create table if not exists public.pedidos (
@@ -59,6 +73,8 @@ create table if not exists public.pedidos (
   quantidade int not null default 1,
   prioridade text not null default 'normal' check (prioridade in ('baixa','normal','alta','urgente')),
   status text not null default 'em_andamento' check (status in ('em_andamento','concluido','cancelado','arquivado')),
+  -- 'pronto' = arte já pronta (aba Pedidos); 'criacao' = arte a criar (aba Criação)
+  tipo text not null default 'pronto' check (tipo in ('pronto','criacao')),
   etapa_atual_id uuid references public.etapas(id),
   data_prevista date,
   concluido_em timestamptz,
@@ -151,13 +167,14 @@ begin
   insert into public.historico (pedido_id, etapa_id, funcionario_id, observacao, via_voz)
   values (v_pedido.id, p_etapa_id, v_uid, coalesce(p_observacao, ''), p_via_voz);
 
-  -- última etapa do fluxo => pedido concluído
-  select max(ordem) into v_ultima_ordem from public.etapas where ativo;
+  -- última etapa DO MESMO FLUXO => conclui apenas no fluxo de produção
+  select max(ordem) into v_ultima_ordem
+    from public.etapas where ativo and fluxo = v_etapa.fluxo;
 
   update public.pedidos
      set etapa_atual_id = p_etapa_id,
-         status = case when v_etapa.ordem >= v_ultima_ordem then 'concluido' else 'em_andamento' end,
-         concluido_em = case when v_etapa.ordem >= v_ultima_ordem then now() else null end,
+         status = case when v_etapa.fluxo = 'producao' and v_etapa.ordem >= v_ultima_ordem then 'concluido' else 'em_andamento' end,
+         concluido_em = case when v_etapa.fluxo = 'producao' and v_etapa.ordem >= v_ultima_ordem then now() else null end,
          cancelado_em = null
    where id = v_pedido.id;
 
@@ -171,7 +188,8 @@ create or replace function public.criar_pedido(
   p_descricao text default '',
   p_quantidade int default 1,
   p_prioridade text default 'normal',
-  p_data_prevista date default null
+  p_data_prevista date default null,
+  p_tipo text default 'pronto'
 )
 returns uuid language plpgsql security definer set search_path = public as $$
 declare
@@ -182,10 +200,13 @@ begin
     raise exception 'Apenas administradores podem criar pedidos';
   end if;
 
-  select id into v_primeira from public.etapas where ativo order by ordem limit 1;
+  -- o pedido nasce na primeira etapa do SEU fluxo (produção ou criação)
+  select id into v_primeira from public.etapas
+   where ativo and fluxo = (case when p_tipo = 'criacao' then 'criacao' else 'producao' end)
+   order by ordem limit 1;
 
-  insert into public.pedidos (numero, cliente, descricao, quantidade, prioridade, etapa_atual_id, data_prevista, created_by)
-  values (p_numero, p_cliente, coalesce(p_descricao,''), p_quantidade, p_prioridade, v_primeira, p_data_prevista, auth.uid())
+  insert into public.pedidos (numero, cliente, descricao, quantidade, prioridade, etapa_atual_id, data_prevista, tipo, created_by)
+  values (p_numero, p_cliente, coalesce(p_descricao,''), p_quantidade, p_prioridade, v_primeira, p_data_prevista, coalesce(p_tipo, 'pronto'), auth.uid())
   returning id into v_id;
 
   insert into public.historico (pedido_id, etapa_id, funcionario_id, observacao)
@@ -254,11 +275,18 @@ alter table public.anexos enable row level security;
 alter table public.metas enable row level security;
 
 -- profiles: todos autenticados leem; admin gerencia; usuário edita o próprio nome
+drop policy if exists "profiles_select" on public.profiles;
+drop policy if exists "profiles_update_admin" on public.profiles;
+drop policy if exists "profiles_update_self" on public.profiles;
 create policy "profiles_select" on public.profiles for select to authenticated using (true);
 create policy "profiles_update_admin" on public.profiles for update to authenticated using (public.is_admin());
 create policy "profiles_update_self" on public.profiles for update to authenticated using (id = auth.uid());
 
 -- etapas: leitura para todos; escrita apenas admin
+drop policy if exists "etapas_select" on public.etapas;
+drop policy if exists "etapas_admin_insert" on public.etapas;
+drop policy if exists "etapas_admin_update" on public.etapas;
+drop policy if exists "etapas_admin_delete" on public.etapas;
 create policy "etapas_select" on public.etapas for select to authenticated using (true);
 create policy "etapas_admin_insert" on public.etapas for insert to authenticated with check (public.is_admin());
 create policy "etapas_admin_update" on public.etapas for update to authenticated using (public.is_admin());
@@ -266,6 +294,10 @@ create policy "etapas_admin_delete" on public.etapas for delete to authenticated
 
 -- pedidos: leitura para todos; criação/edição/exclusão apenas admin
 -- (funcionários movem etapas apenas pela função mover_pedido)
+drop policy if exists "pedidos_select" on public.pedidos;
+drop policy if exists "pedidos_admin_insert" on public.pedidos;
+drop policy if exists "pedidos_admin_update" on public.pedidos;
+drop policy if exists "pedidos_admin_delete" on public.pedidos;
 create policy "pedidos_select" on public.pedidos for select to authenticated using (true);
 create policy "pedidos_admin_insert" on public.pedidos for insert to authenticated with check (public.is_admin());
 create policy "pedidos_admin_update" on public.pedidos for update to authenticated using (public.is_admin());
@@ -273,14 +305,22 @@ create policy "pedidos_admin_delete" on public.pedidos for delete to authenticat
 
 -- historico: leitura para todos; NUNCA pode ser apagado ou alterado diretamente
 -- (inserções/fechamentos acontecem via funções security definer)
+drop policy if exists "historico_select" on public.historico;
 create policy "historico_select" on public.historico for select to authenticated using (true);
 
 -- anexos: leitura para todos; upload por qualquer autenticado; exclusão só admin
+drop policy if exists "anexos_select" on public.anexos;
+drop policy if exists "anexos_insert" on public.anexos;
+drop policy if exists "anexos_admin_delete" on public.anexos;
 create policy "anexos_select" on public.anexos for select to authenticated using (true);
 create policy "anexos_insert" on public.anexos for insert to authenticated with check (uploaded_by = auth.uid());
 create policy "anexos_admin_delete" on public.anexos for delete to authenticated using (public.is_admin());
 
 -- metas: leitura para todos; escrita apenas admin
+drop policy if exists "metas_select" on public.metas;
+drop policy if exists "metas_admin_insert" on public.metas;
+drop policy if exists "metas_admin_update" on public.metas;
+drop policy if exists "metas_admin_delete" on public.metas;
 create policy "metas_select" on public.metas for select to authenticated using (true);
 create policy "metas_admin_insert" on public.metas for insert to authenticated with check (public.is_admin());
 create policy "metas_admin_update" on public.metas for update to authenticated using (public.is_admin());
@@ -325,11 +365,19 @@ create index if not exists estoque_itens_categoria_idx on public.estoque_itens (
 alter table public.estoque_categorias enable row level security;
 alter table public.estoque_itens enable row level security;
 
+drop policy if exists "estoque_cat_select" on public.estoque_categorias;
+drop policy if exists "estoque_cat_admin_insert" on public.estoque_categorias;
+drop policy if exists "estoque_cat_admin_update" on public.estoque_categorias;
+drop policy if exists "estoque_cat_admin_delete" on public.estoque_categorias;
 create policy "estoque_cat_select" on public.estoque_categorias for select to authenticated using (true);
 create policy "estoque_cat_admin_insert" on public.estoque_categorias for insert to authenticated with check (public.is_admin());
 create policy "estoque_cat_admin_update" on public.estoque_categorias for update to authenticated using (public.is_admin());
 create policy "estoque_cat_admin_delete" on public.estoque_categorias for delete to authenticated using (public.is_admin());
 
+drop policy if exists "estoque_item_select" on public.estoque_itens;
+drop policy if exists "estoque_item_admin_insert" on public.estoque_itens;
+drop policy if exists "estoque_item_admin_update" on public.estoque_itens;
+drop policy if exists "estoque_item_admin_delete" on public.estoque_itens;
 create policy "estoque_item_select" on public.estoque_itens for select to authenticated using (true);
 create policy "estoque_item_admin_insert" on public.estoque_itens for insert to authenticated with check (public.is_admin());
 create policy "estoque_item_admin_update" on public.estoque_itens for update to authenticated using (public.is_admin());
@@ -371,6 +419,9 @@ insert into storage.buckets (id, name, public)
 values ('anexos', 'anexos', false)
 on conflict (id) do nothing;
 
+drop policy if exists "anexos_storage_read" on storage.objects;
+drop policy if exists "anexos_storage_upload" on storage.objects;
+drop policy if exists "anexos_storage_delete_admin" on storage.objects;
 create policy "anexos_storage_read" on storage.objects
   for select to authenticated using (bucket_id = 'anexos');
 create policy "anexos_storage_upload" on storage.objects

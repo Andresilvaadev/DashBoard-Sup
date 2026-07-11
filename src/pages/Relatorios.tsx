@@ -36,7 +36,7 @@ function inicioDoPeriodo(p: Periodo): Date {
 }
 
 export default function Relatorios() {
-  const { etapasAtivas } = useEtapas()
+  const { etapasAtivas, etapasCriacao } = useEtapas()
   const [periodo, setPeriodo] = useState<Periodo>('semana')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [historico, setHistorico] = useState<Historico[]>([])
@@ -115,6 +115,39 @@ export default function Relatorios() {
       }
     })
 
+    // ---- FLUXO DE CRIAÇÃO DE ARTE (aba Criação) ----
+    const idsCriacao = new Set(etapasCriacao.map((e) => e.id))
+    const ultimaOrdemCriacao = Math.max(0, ...etapasCriacao.map((e) => e.ordem))
+    const porEtapaCriacao = etapasCriacao.map((e) => {
+      // a última etapa da criação não tem saída: conta quem chegou nela
+      const fonte = e.ordem >= ultimaOrdemCriacao ? historico : fechados
+      const regs = fonte.filter((h) => h.etapa_id === e.id)
+      const pedidosUnicos = new Set(regs.map((r) => r.pedido_id))
+      const tempos = regs.map((r) => r.segundos_gastos ?? 0).filter((t) => t > 0)
+      return {
+        nome: e.nome,
+        cor: e.cor,
+        qtd: pedidosUnicos.size,
+        tempoMedio: tempos.length ? tempos.reduce((a, b) => a + b, 0) / tempos.length : null,
+      }
+    })
+
+    // tempo total de criação por pedido = soma do tempo nas etapas de criação
+    // (inclui idas e voltas por alterações/aprovação)
+    const tempoCriacaoPorPedido = new Map<string, number>()
+    for (const h of fechados) {
+      if (!idsCriacao.has(h.etapa_id)) continue
+      tempoCriacaoPorPedido.set(
+        h.pedido_id,
+        (tempoCriacaoPorPedido.get(h.pedido_id) ?? 0) + (h.segundos_gastos ?? 0),
+      )
+    }
+    const temposCriacao = [...tempoCriacaoPorPedido.values()].filter((t) => t > 0)
+    const tempoMedioCriacao = temposCriacao.length
+      ? temposCriacao.reduce((a, b) => a + b, 0) / temposCriacao.length
+      : null
+    const totalCriacoes = tempoCriacaoPorPedido.size
+
     // funcionário mais produtivo: pedido+etapa únicos (repetir a mesma etapa
     // do mesmo pedido não conta em dobro)
     const porFunc = new Map<string, Set<string>>()
@@ -168,6 +201,9 @@ export default function Relatorios() {
       cancelados,
       arquivados,
       porEtapa,
+      porEtapaCriacao,
+      tempoMedioCriacao,
+      totalCriacoes,
       rankFunc,
       setorTop,
       tempoMedioProducao,
@@ -176,7 +212,7 @@ export default function Relatorios() {
       totalMeta,
       evolucao,
     }
-  }, [pedidos, historico, metas, etapasAtivas, periodo])
+  }, [pedidos, historico, metas, etapasAtivas, etapasCriacao, periodo])
 
   const labelPeriodo = PERIODOS.find((p) => p.id === periodo)!.label
 
@@ -215,6 +251,18 @@ export default function Relatorios() {
       colunas: ['Funcionário', 'Etapas movimentadas'],
       linhas: rel.rankFunc.map(([nome, qtd]) => [nome, qtd]),
     },
+    ...(rel.porEtapaCriacao.length > 0
+      ? [
+          {
+            titulo: 'Criação de Arte — tempo por etapa',
+            colunas: ['Etapa', 'Pedidos', 'Tempo médio'],
+            linhas: [
+              ...rel.porEtapaCriacao.map((e) => [e.nome, e.qtd, formatarDuracao(e.tempoMedio)]),
+              ['Tempo médio total de criação', rel.totalCriacoes, formatarDuracao(rel.tempoMedioCriacao)],
+            ],
+          } as TabelaExport,
+        ]
+      : []),
     ...(rel.cancelados.length > 0
       ? [
           {
@@ -246,7 +294,7 @@ export default function Relatorios() {
             }}
             className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium hover:bg-slate-800"
           >
-            ⬇ PDF
+            ↓ PDF
           </button>
           <button
             onClick={async () => {
@@ -255,7 +303,7 @@ export default function Relatorios() {
             }}
             className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium hover:bg-slate-800"
           >
-            ⬇ Excel
+            ↓ Excel
           </button>
         </div>
       </div>
@@ -490,6 +538,43 @@ export default function Relatorios() {
             </div>
           </div>
 
+          {/* Criação de arte — tempo por etapa (aba Criação) */}
+          {rel.porEtapaCriacao.length > 0 && (
+            <div className="rounded-xl border border-fuchsia-900/60 bg-slate-900 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-fuchsia-300">◆ Criação de arte</h2>
+                <span className="text-xs text-slate-400">
+                  Tempo médio para criar:{' '}
+                  <span className="font-semibold text-slate-200">
+                    {formatarDuracao(rel.tempoMedioCriacao)}
+                  </span>
+                  {rel.totalCriacoes > 0 && ` • ${rel.totalCriacoes} arte(s)`}
+                </span>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
+                    <th className="pb-2 font-medium">Etapa da criação</th>
+                    <th className="pb-2 text-right font-medium">Pedidos</th>
+                    <th className="pb-2 text-right font-medium">Tempo médio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rel.porEtapaCriacao.map((e) => (
+                    <tr key={e.nome} className="border-b border-slate-800/50">
+                      <td className="py-2">
+                        <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
+                        {e.nome}
+                      </td>
+                      <td className="py-2 text-right font-medium">{e.qtd}</td>
+                      <td className="py-2 text-right text-slate-400">{formatarDuracao(e.tempoMedio)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* Ranking de funcionários */}
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
             <h2 className="mb-3 text-sm font-semibold">Produção por funcionário</h2>
@@ -501,7 +586,7 @@ export default function Relatorios() {
                   <div key={nome}>
                     <div className="mb-1 flex justify-between text-xs">
                       <span className="font-medium text-slate-300">
-                        {i === 0 && '🏆 '}
+                        {i === 0 && '★ '}
                         {nome}
                       </span>
                       <span className="text-slate-500">{qtd} etapas</span>

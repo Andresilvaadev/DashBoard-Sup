@@ -1,6 +1,8 @@
 export type Role = 'admin' | 'funcionario'
 export type StatusPedido = 'em_andamento' | 'concluido' | 'cancelado' | 'arquivado'
 export type Prioridade = 'baixa' | 'normal' | 'alta' | 'urgente'
+/** 'pronto' = arte já pronta (aba Pedidos); 'criacao' = arte a criar (aba Criação) */
+export type TipoPedido = 'pronto' | 'criacao'
 
 export interface Profile {
   id: string
@@ -18,6 +20,8 @@ export interface Etapa {
   cor: string
   palavras_chave: string[]
   ativo: boolean
+  /** 'producao' = aba Pedidos; 'criacao' = aba Pedidos para criação */
+  fluxo: 'producao' | 'criacao'
 }
 
 export interface Pedido {
@@ -28,6 +32,7 @@ export interface Pedido {
   quantidade: number
   prioridade: Prioridade
   status: StatusPedido
+  tipo: TipoPedido
   etapa_atual_id: string | null
   data_prevista: string | null
   concluido_em: string | null

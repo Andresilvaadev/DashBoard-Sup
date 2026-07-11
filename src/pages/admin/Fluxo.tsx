@@ -4,14 +4,18 @@ import { useEtapas } from '../../hooks/useEtapas'
 import { supabase } from '../../lib/supabase'
 import type { Etapa } from '../../types'
 
-/** Admin: criar, editar, reordenar e desativar etapas do fluxo de produção. */
+/** Admin: criar, editar, reordenar e desativar etapas dos fluxos (produção e criação). */
 export default function Fluxo() {
   const toast = useToast()
-  const { etapas, recarregar } = useEtapas()
+  const { etapas: todasEtapas, recarregar } = useEtapas()
+  const [fluxo, setFluxo] = useState<'producao' | 'criacao'>('producao')
   const [editando, setEditando] = useState<Etapa | 'nova' | null>(null)
   const [nome, setNome] = useState('')
   const [cor, setCor] = useState('#ec1c24')
   const [palavras, setPalavras] = useState('')
+
+  // lista mostrada: só as etapas do fluxo selecionado
+  const etapas = todasEtapas.filter((e) => (e.fluxo ?? 'producao') === fluxo)
 
   const abrir = (e: Etapa | 'nova') => {
     setEditando(e)
@@ -35,7 +39,9 @@ export default function Fluxo() {
     let error
     if (editando === 'nova') {
       const maxOrdem = Math.max(0, ...etapas.map((e) => e.ordem))
-      ;({ error } = await supabase.from('etapas').insert({ nome, cor, palavras_chave, ordem: maxOrdem + 1 }))
+      ;({ error } = await supabase
+        .from('etapas')
+        .insert({ nome, cor, palavras_chave, ordem: maxOrdem + 1, fluxo }))
     } else if (editando) {
       ;({ error } = await supabase.from('etapas').update({ nome, cor, palavras_chave }).eq('id', editando.id))
     }
@@ -85,10 +91,26 @@ export default function Fluxo() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">
-          As <strong>palavras-chave</strong> são usadas pelos comandos de voz.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* seletor do fluxo: produção (aba Pedidos) x criação (aba Criação) */}
+        <div className="flex rounded-lg border border-slate-700 p-0.5">
+          <button
+            onClick={() => setFluxo('producao')}
+            className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+              fluxo === 'producao' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Produção (Pedidos)
+          </button>
+          <button
+            onClick={() => setFluxo('criacao')}
+            className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+              fluxo === 'criacao' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Criação de arte
+          </button>
+        </div>
         <button
           onClick={() => abrir('nova')}
           className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
@@ -96,6 +118,10 @@ export default function Fluxo() {
           + Nova etapa
         </button>
       </div>
+      <p className="text-sm text-slate-400">
+        As <strong>palavras-chave</strong> são usadas pelos comandos de voz.
+        {fluxo === 'criacao' && ' Estas etapas aparecem na aba Criação.'}
+      </p>
 
       <div className="space-y-2">
         {etapas.map((e, i) => (
@@ -135,7 +161,7 @@ export default function Fluxo() {
                 {!e.ativo && <span className="ml-2 text-xs text-slate-500">(desativada)</span>}
               </p>
               <p className="truncate text-xs text-slate-500">
-                🎙️ {e.palavras_chave.join(', ') || 'sem palavras-chave'}
+                Voz: {e.palavras_chave.join(', ') || 'sem palavras-chave'}
               </p>
             </div>
             <div className="flex shrink-0 gap-3 text-xs">

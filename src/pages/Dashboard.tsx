@@ -150,7 +150,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold md:text-2xl">Olá, {profile?.nome?.split(' ')[0]} 👋</h1>
+        <h1 className="text-xl font-bold md:text-2xl">Olá, {profile?.nome?.split(' ')[0]}</h1>
         <p className="text-sm text-slate-400">Acompanhamento da produção em tempo real</p>
       </div>
 
@@ -336,7 +336,14 @@ export default function Dashboard() {
                         #{e.h.pedido?.numero}
                       </Link>
                       <span className="text-slate-300">→ {e.h.etapa?.nome}</span>
-                      {e.h.via_voz && <span title="Via comando de voz">🎙️</span>}
+                      {e.h.via_voz && (
+                        <span
+                          title="Via comando de voz"
+                          className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400"
+                        >
+                          voz
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500">
                       {e.h.funcionario?.nome ?? 'Sistema'} • {formatarDataHora(e.h.entrada)}

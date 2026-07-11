@@ -17,7 +17,7 @@ export default function PedidoDetalhe() {
   const navigate = useNavigate()
   const toast = useToast()
   const { isAdmin } = useAuth()
-  const { etapas, etapasAtivas } = useEtapas()
+  const { etapas, etapasAtivas, etapasCriacao } = useEtapas()
   const { pedidos: todosPedidos } = usePedidos()
   const [pedido, setPedido] = useState<Pedido | null>(null)
   const [historico, setHistorico] = useState<Historico[]>([])
@@ -114,6 +114,38 @@ export default function PedidoDetalhe() {
     if (error) toast(error.message, 'erro')
     else {
       toast('Arquivo anexado.', 'sucesso')
+      carregar()
+    }
+  }
+
+  /** Arte pronta: muda o pedido para a aba Pedidos e o põe na 1ª etapa da produção */
+  const enviarParaProducao = async () => {
+    if (!pedido) return
+    const primeira = etapasAtivas[0]
+    if (!primeira) return
+    if (
+      !confirm(
+        `Arte do pedido ${pedido.numero} pronta? Ele vai para a aba Pedidos, na etapa "${primeira.nome}".`,
+      )
+    )
+      return
+    setMovendo(true)
+    const { error: e1 } = await supabase
+      .from('pedidos')
+      .update({ tipo: 'pronto' })
+      .eq('id', pedido.id)
+    const { error: e2 } = e1
+      ? { error: e1 }
+      : await supabase.rpc('mover_pedido', {
+          p_numero: pedido.numero,
+          p_etapa_id: primeira.id,
+          p_observacao: 'Arte pronta — enviado para produção',
+          p_via_voz: false,
+        })
+    setMovendo(false)
+    if (e1 || e2) toast((e1 ?? e2)!.message, 'erro')
+    else {
+      toast('Arte pronta! Pedido enviado para a aba Pedidos.', 'sucesso')
       carregar()
     }
   }
@@ -231,13 +263,18 @@ export default function PedidoDetalhe() {
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">Pedido #{pedido.numero}</h1>
+          {(pedido.tipo ?? 'pronto') === 'criacao' && (
+            <span className="rounded-full bg-fuchsia-900 px-3 py-1 text-xs font-medium text-fuchsia-300">
+              ◆ Criação de arte
+            </span>
+          )}
           {pedido.status === 'concluido' ? (
             <span className="rounded-full bg-emerald-900 px-3 py-1 text-xs font-medium text-emerald-300">
               ✓ Concluído
             </span>
           ) : pedido.status === 'arquivado' ? (
             <span className="rounded-full bg-violet-900 px-3 py-1 text-xs font-medium text-violet-300">
-              📥 Arquivado
+              ◆ Arquivado
             </span>
           ) : pedido.status === 'cancelado' ? (
             <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-400">
@@ -277,7 +314,7 @@ export default function PedidoDetalhe() {
                   onClick={() => void alterarStatus('arquivado')}
                   className="rounded-lg border border-violet-800 px-3 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-950"
                 >
-                  📥 Arquivar sem concluir
+                  ◆ Arquivar sem concluir
                 </button>
                 <button
                   onClick={() => void alterarStatus('cancelado')}
@@ -299,7 +336,7 @@ export default function PedidoDetalhe() {
               onClick={() => void excluirPedido()}
               className="rounded-lg border border-rose-900 px-3 py-1.5 text-xs font-medium text-rose-400 hover:bg-rose-950"
             >
-              🗑 Excluir definitivamente
+              ✕ Excluir definitivamente
             </button>
           </div>
         )}
@@ -309,7 +346,7 @@ export default function PedidoDetalhe() {
       {pedido.status === 'em_andamento' && passaramNaFrente.length > 0 && (
         <div className="rounded-xl border border-amber-900 bg-amber-950/40 p-4">
           <p className="text-sm font-semibold text-amber-300">
-            ⏫{' '}
+            ▲{' '}
             {passaramNaFrente.length > 1
               ? `${passaramNaFrente.length} pedidos criados depois deste já passaram na frente`
               : '1 pedido criado depois deste já passou na frente'}
@@ -332,12 +369,18 @@ export default function PedidoDetalhe() {
         </div>
       )}
 
-      {/* Mover etapa (pedido cancelado/arquivado não se move; reative antes) */}
+      {/* Mover etapa (pedido cancelado/arquivado não se move; reative antes).
+          Cada aba tem seu fluxo: produção ou criação de arte. */}
       {pedido.status !== 'cancelado' && pedido.status !== 'arquivado' && (
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-        <h2 className="mb-3 text-sm font-semibold">Mover para etapa</h2>
+        <h2 className="mb-3 text-sm font-semibold">
+          Mover para etapa
+          {(pedido.tipo ?? 'pronto') === 'criacao' && (
+            <span className="ml-2 text-xs font-normal text-fuchsia-300">(fluxo de criação)</span>
+          )}
+        </h2>
         <div className="flex flex-wrap gap-2">
-          {etapasAtivas.map((e) => {
+          {((pedido.tipo ?? 'pronto') === 'criacao' ? etapasCriacao : etapasAtivas).map((e) => {
             const atual = e.id === pedido.etapa_atual_id
             return (
               <button
@@ -356,6 +399,15 @@ export default function PedidoDetalhe() {
             )
           })}
         </div>
+        {(pedido.tipo ?? 'pronto') === 'criacao' && etapasAtivas.length > 0 && (
+          <button
+            onClick={() => void enviarParaProducao()}
+            disabled={movendo}
+            className="mt-3 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-semibold text-emerald-400 hover:bg-emerald-950 disabled:opacity-40"
+          >
+            ✓ Arte pronta — enviar para Pedidos
+          </button>
+        )}
       </div>
       )}
 
@@ -384,7 +436,12 @@ export default function PedidoDetalhe() {
                 </div>
                 <span className="w-24 shrink-0 text-right text-xs text-slate-400">
                   {formatarDuracao(segundos)}
-                  {emAndamento && ' ⏳'}
+                  {emAndamento && (
+                    <span
+                      title="Etapa em andamento"
+                      className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 align-middle"
+                    />
+                  )}
                 </span>
               </div>
             ))}
@@ -408,7 +465,14 @@ export default function PedidoDetalhe() {
                 />
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="text-sm font-semibold">{h.etapa?.nome}</span>
-                  {h.via_voz && <span title="Via comando de voz">🎙️</span>}
+                  {h.via_voz && (
+                    <span
+                      title="Via comando de voz"
+                      className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-400"
+                    >
+                      voz
+                    </span>
+                  )}
                   <span className="text-xs text-slate-500">
                     {h.saida ? formatarDuracao(h.segundos_gastos) : `em andamento (${formatarDuracao(segundosDesde(h.entrada))})`}
                   </span>
@@ -488,8 +552,8 @@ export default function PedidoDetalhe() {
                         onClick={() => void baixarAnexo(a)}
                         className="flex w-full items-center gap-3 rounded-lg border border-slate-800 p-2.5 text-left hover:border-slate-600"
                       >
-                        <span className="text-xl">
-                          {a.tipo.startsWith('image/') ? '🖼️' : a.tipo.includes('pdf') ? '📄' : '📎'}
+                        <span className="rounded border border-slate-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {a.tipo.startsWith('image/') ? 'Img' : a.tipo.includes('pdf') ? 'PDF' : 'Arq'}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">{a.nome}</span>

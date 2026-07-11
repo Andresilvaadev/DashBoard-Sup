@@ -32,6 +32,7 @@ export default function App() {
             >
               <Route path="/" element={<Dashboard />} />
               <Route path="/pedidos" element={<Pedidos />} />
+              <Route path="/criacao" element={<Pedidos tipo="criacao" />} />
               <Route path="/pedidos/:numero" element={<PedidoDetalhe />} />
               <Route path="/arquivo" element={<Arquivo />} />
               <Route path="/estoque" element={<Estoque />} />

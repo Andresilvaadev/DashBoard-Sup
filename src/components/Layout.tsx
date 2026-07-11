@@ -17,6 +17,12 @@ const icones = {
       <path d="M9 5h6M9 5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 12h6M9 16h4" />
     </svg>
   ),
+  criacao: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
+      <path d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.586 7.586" />
+      <circle cx="11" cy="11" r="2" />
+    </svg>
+  ),
   arquivo: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
       <rect x="3" y="4" width="18" height="4" rx="1.5" />
@@ -47,6 +53,7 @@ export default function Layout() {
   const links = [
     { to: '/', label: 'Dashboard', icone: icones.dashboard },
     { to: '/pedidos', label: 'Pedidos', icone: icones.pedidos },
+    { to: '/criacao', label: 'Criação', icone: icones.criacao },
     { to: '/arquivo', label: 'Arquivo', icone: icones.arquivo },
     { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
     { to: '/estoque', label: 'Estoque', icone: icones.estoque },

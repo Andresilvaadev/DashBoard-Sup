@@ -20,6 +20,8 @@ export function pedidosQuePassaramNaFrente(
 
   return todos.filter((outro) => {
     if (outro.id === pedido.id || outro.status === 'cancelado') return false
+    // compara apenas pedidos da mesma aba (produção x criação têm fluxos próprios)
+    if ((outro.tipo ?? 'pronto') !== (pedido.tipo ?? 'pronto')) return false
     // só pedidos criados depois deste (timestamps ISO comparam em ordem)
     if (outro.created_at <= pedido.created_at) return false
     // concluído = passou por todas as etapas, logo passou na frente

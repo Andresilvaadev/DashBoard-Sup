@@ -69,7 +69,7 @@ export default function Metas() {
             onChange={(e) => setEtapaId(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500"
           >
-            <option value="">🎯 Geral — pedidos concluídos no dia</option>
+            <option value="">Geral — pedidos concluídos no dia</option>
             {etapasAtivas.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.ordem}. {e.nome}
@@ -134,7 +134,7 @@ export default function Metas() {
                     </span>
                   ) : (
                     <span className="truncate rounded-full bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-300">
-                      🎯 Geral
+                      Geral
                     </span>
                   )}
                 </span>

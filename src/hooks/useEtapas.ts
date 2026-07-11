@@ -25,5 +25,13 @@ export function useEtapas() {
     }
   }, [])
 
-  return { etapas, etapasAtivas: etapas.filter((e) => e.ativo), loading, recarregar: carregar }
+  return {
+    etapas,
+    /** etapas ativas do fluxo de PRODUÇÃO (aba Pedidos) */
+    etapasAtivas: etapas.filter((e) => e.ativo && (e.fluxo ?? 'producao') === 'producao'),
+    /** etapas ativas do fluxo de CRIAÇÃO de arte (aba Criação) */
+    etapasCriacao: etapas.filter((e) => e.ativo && e.fluxo === 'criacao'),
+    loading,
+    recarregar: carregar,
+  }
 }

@@ -2,8 +2,8 @@
 // Usa "upload não assinado" (unsigned upload preset), que permite enviar
 // direto do navegador sem backend — do mesmo jeito que o Supabase é usado hoje.
 
-const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined
-const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined
+const cloudName = (import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string | undefined)?.trim()
+const uploadPreset = (import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string | undefined)?.trim()
 
 /** true quando as variáveis do Cloudinary estão preenchidas no .env */
 export const cloudinaryConfigurado = Boolean(cloudName && uploadPreset)

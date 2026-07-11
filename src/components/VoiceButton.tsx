@@ -34,7 +34,7 @@ const MENSAGENS_ERRO: Record<string, string> = {
 export default function VoiceButton() {
   const toast = useToast()
   const { pathname } = useLocation()
-  const { etapasAtivas } = useEtapas()
+  const { etapasAtivas, etapasCriacao } = useEtapas()
   const [fase, setFase] = useState<Fase>('ocioso')
   const [comando, setComando] = useState<ComandoVoz | null>(null)
   const [comandoEstoque, setComandoEstoque] = useState<ComandoEstoque | null>(null)
@@ -45,13 +45,15 @@ export default function VoiceButton() {
   // o microfone só aparece (e age) nas telas em que é usado
   const modo: Modo | null = pathname.startsWith('/estoque')
     ? 'estoque'
-    : pathname.startsWith('/pedidos')
+    : pathname.startsWith('/pedidos') || pathname.startsWith('/criacao')
       ? 'pedidos'
       : null
 
   // refs estáveis para uso dentro dos callbacks do reconhecedor
-  const etapasRef = useRef(etapasAtivas)
-  etapasRef.current = etapasAtivas
+  // (na aba Criação, os comandos de voz usam as etapas do fluxo de criação)
+  const etapasDaRota = pathname.startsWith('/criacao') ? etapasCriacao : etapasAtivas
+  const etapasRef = useRef(etapasDaRota)
+  etapasRef.current = etapasDaRota
   const modoRef = useRef(modo)
   modoRef.current = modo
   const toastRef = useRef(toast)
@@ -233,13 +235,17 @@ export default function VoiceButton() {
             <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H8a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-2.08A7 7 0 0 0 19 11Z" />
           </svg>
         ) : (
-          <span className="text-lg font-bold">⌨</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-6 w-6">
+            <rect x="2" y="6" width="20" height="12" rx="2" />
+            <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6" />
+          </svg>
         )}
       </button>
 
       {fase === 'gravando' && (
         <div className="fixed bottom-36 right-4 z-50 rounded-lg bg-slate-800 px-4 py-2 text-sm shadow-lg md:bottom-24 md:right-6">
-          🎙️ Ouvindo… fale por ex. <span className="font-semibold">"{exemplo}"</span>
+          <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-rose-500 align-middle" />
+          Ouvindo… fale por ex. <span className="font-semibold">"{exemplo}"</span>
         </div>
       )}
 

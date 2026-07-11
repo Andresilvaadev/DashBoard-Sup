@@ -32,7 +32,7 @@ export default function Login() {
 
         {!supabaseConfigurado && (
           <div className="mb-4 rounded-lg border border-amber-700 bg-amber-950/50 p-3 text-xs text-amber-300">
-            ⚠️ Supabase não configurado. Copie <code>.env.example</code> para <code>.env</code>,
+            Supabase não configurado. Copie <code>.env.example</code> para <code>.env</code>,
             preencha as chaves do seu projeto e execute <code>supabase/schema.sql</code> no SQL Editor.
           </div>
         )}

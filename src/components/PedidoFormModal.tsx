@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
-import type { Pedido, Prioridade, StatusPedido } from '../types'
+import type { Pedido, Prioridade, StatusPedido, TipoPedido } from '../types'
 import { enviarAnexo } from '../lib/anexos'
 import { comprimirImagem } from '../utils/imagem'
 
 /** Modal de criação/edição de pedido (apenas admin), com anexo de imagens/arquivos. */
 export default function PedidoFormModal({
   pedido,
+  tipoNovo = 'pronto',
   onFechar,
   onSalvo,
 }: {
   pedido?: Pedido | null
+  /** tipo usado ao CRIAR (a aba de origem define: Pedidos ou Criação) */
+  tipoNovo?: TipoPedido
   onFechar: () => void
   onSalvo: () => void
 }) {
@@ -22,6 +25,7 @@ export default function PedidoFormModal({
   const [descricao, setDescricao] = useState(pedido?.descricao ?? '')
   const [quantidade, setQuantidade] = useState(pedido?.quantidade?.toString() ?? '1')
   const [prioridade, setPrioridade] = useState<Prioridade>(pedido?.prioridade ?? 'normal')
+  const [tipo, setTipo] = useState<TipoPedido>(pedido?.tipo ?? tipoNovo)
   const [status, setStatus] = useState<StatusPedido>(pedido?.status ?? 'em_andamento')
   const [dataPrevista, setDataPrevista] = useState(pedido?.data_prevista ?? '')
   const [arquivos, setArquivos] = useState<File[]>([])
@@ -102,6 +106,7 @@ export default function PedidoFormModal({
           descricao,
           quantidade: parseInt(quantidade, 10) || 1,
           prioridade,
+          tipo,
           status,
           // cada status ganha sua própria data ao ser aplicado; sair do status limpa
           concluido_em:
@@ -121,6 +126,7 @@ export default function PedidoFormModal({
         p_quantidade: parseInt(quantidade, 10) || 1,
         p_prioridade: prioridade,
         p_data_prevista: dataPrevista || null,
+        p_tipo: tipo,
       })
       error = res.error
       pedidoId = typeof res.data === 'string' && res.data ? res.data : null
@@ -230,18 +236,31 @@ export default function PedidoFormModal({
         </div>
 
         {editando && (
-          <div className="mt-3">
-            <label className="text-xs font-medium text-slate-400">Status</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as StatusPedido)}
-              className={inputCls}
-            >
-              <option value="em_andamento">Em andamento</option>
-              <option value="concluido">Concluído</option>
-              <option value="arquivado">Arquivado (sem concluir)</option>
-              <option value="cancelado">Cancelado</option>
-            </select>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-400">Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as StatusPedido)}
+                className={inputCls}
+              >
+                <option value="em_andamento">Em andamento</option>
+                <option value="concluido">Concluído</option>
+                <option value="arquivado">Arquivado (sem concluir)</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-400">Aba</label>
+              <select
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value as TipoPedido)}
+                className={inputCls}
+              >
+                <option value="pronto">Pedidos (arte pronta)</option>
+                <option value="criacao">Criação de arte</option>
+              </select>
+            </div>
           </div>
         )}
 
@@ -266,7 +285,11 @@ export default function PedidoFormModal({
             onClick={() => fileRef.current?.click()}
             className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-600 py-3 text-sm text-slate-400 transition-colors hover:border-red-500 hover:text-red-400"
           >
-            📷 Adicionar imagem ou arquivo
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+            Adicionar imagem ou arquivo
           </button>
 
           {arquivos.length > 0 && (
@@ -281,8 +304,10 @@ export default function PedidoFormModal({
                     {preview ? (
                       <img src={preview} alt={f.name} className="h-20 w-full object-cover" />
                     ) : (
-                      <div className="flex h-20 w-full items-center justify-center text-2xl">
-                        {f.type.includes('pdf') ? '📄' : '📎'}
+                      <div className="flex h-20 w-full items-center justify-center">
+                        <span className="rounded border border-slate-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {f.type.includes('pdf') ? 'PDF' : 'Arquivo'}
+                        </span>
                       </div>
                     )}
                     <p className="truncate px-1.5 py-1 text-[10px] text-slate-400">{f.name}</p>

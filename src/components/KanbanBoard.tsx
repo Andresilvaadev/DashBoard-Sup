@@ -143,7 +143,7 @@ export default function KanbanBoard({
                               title="Excluir pedido"
                               className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-rose-400"
                             >
-                              🗑
+                              ✕
                             </button>
                           )}
                           <button
@@ -169,7 +169,7 @@ export default function KanbanBoard({
                             title={`${ultrapassagens?.[p.id]} pedido(s) criado(s) depois deste já estão em etapa à frente`}
                             className="rounded-full bg-violet-900 px-2 py-0.5 font-semibold text-violet-300"
                           >
-                            ⏫ {ultrapassagens?.[p.id]}
+                            ▲ {ultrapassagens?.[p.id]}
                           </span>
                         )}
                         {(p.prioridade === 'alta' || p.prioridade === 'urgente') && (
@@ -184,7 +184,7 @@ export default function KanbanBoard({
                           </span>
                         )}
                         {p.data_prevista && (
-                          <span className="text-slate-500">📅 {formatarData(p.data_prevista)}</span>
+                          <span className="text-slate-500">entrega {formatarData(p.data_prevista)}</span>
                         )}
                         <span className="text-slate-600">{p.quantidade} un.</span>
                       </div>

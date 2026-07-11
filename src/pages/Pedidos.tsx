@@ -7,7 +7,7 @@ import { useToast } from '../contexts/ToastContext'
 import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
-import type { Pedido } from '../types'
+import type { Pedido, TipoPedido } from '../types'
 import { urlsAnexos } from '../lib/anexos'
 import { mapaUltrapassagens } from '../utils/fila'
 import { removerAnexosStorage } from '../utils/storage'
@@ -20,11 +20,14 @@ const prioridadeBadge: Record<string, string> = {
   urgente: 'bg-rose-900 text-rose-300',
 }
 
-export default function Pedidos() {
+/** Mesma tela para as duas abas: Pedidos (arte pronta) e Pedidos para criação. */
+export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
   const { isAdmin } = useAuth()
   const toast = useToast()
   const { pedidos, recarregar } = usePedidos()
-  const { etapas, etapasAtivas } = useEtapas()
+  const { etapas, etapasAtivas, etapasCriacao } = useEtapas()
+  // cada aba usa o seu fluxo de etapas (produção x criação de arte)
+  const etapasDaAba = tipo === 'criacao' ? etapasCriacao : etapasAtivas
   const [busca, setBusca] = useState('')
   const [filtroEtapa, setFiltroEtapa] = useState('')
   const [modal, setModal] = useState<'novo' | Pedido | null>(null)
@@ -79,6 +82,8 @@ export default function Pedidos() {
       // Pedidos = produção do dia a dia (em andamento). Concluídos e
       // cancelados ficam na aba Arquivo.
       if (p.status !== 'em_andamento') return false
+      // separa as abas: arte pronta x criação (pedidos antigos contam como 'pronto')
+      if ((p.tipo ?? 'pronto') !== tipo) return false
       if (filtroEtapa && p.etapa_atual_id !== filtroEtapa) return false
       if (!q) return true
       return (
@@ -87,7 +92,7 @@ export default function Pedidos() {
         p.descricao.toLowerCase().includes(q)
       )
     })
-  }, [pedidos, busca, filtroEtapa])
+  }, [pedidos, busca, filtroEtapa, tipo])
 
   const excluir = async (p: Pedido) => {
     if (
@@ -114,8 +119,13 @@ export default function Pedidos() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold md:text-2xl">Pedidos</h1>
-          <p className="text-sm text-slate-400">{filtrados.length} pedido(s)</p>
+          <h1 className="text-xl font-bold md:text-2xl">
+            {tipo === 'criacao' ? 'Pedidos para criação' : 'Pedidos'}
+          </h1>
+          <p className="text-sm text-slate-400">
+            {filtrados.length} pedido(s)
+            {tipo === 'criacao' && ' aguardando criação de arte'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {/* Alternância Kanban / Lista */}
@@ -158,7 +168,7 @@ export default function Pedidos() {
         />
         <select value={filtroEtapa} onChange={(e) => setFiltroEtapa(e.target.value)} className={inputCls}>
           <option value="">Todas etapas</option>
-          {etapasAtivas.map((e) => (
+          {etapasDaAba.map((e) => (
             <option key={e.id} value={e.id}>
               {e.nome}
             </option>
@@ -170,7 +180,7 @@ export default function Pedidos() {
       {visao === 'kanban' && (
         <KanbanBoard
           pedidos={filtrados}
-          etapas={etapasAtivas}
+          etapas={etapasDaAba}
           ultrapassagens={ultrapassagens}
           fotos={fotos}
           onEditar={isAdmin ? (p) => setModal(p) : undefined}
@@ -242,7 +252,7 @@ export default function Pedidos() {
                     title={`${ultrapassagens[p.id]} pedido(s) criado(s) depois deste já estão em etapa à frente`}
                     className="rounded-full bg-violet-900 px-2.5 py-1 font-medium text-violet-300"
                   >
-                    ⏫ {ultrapassagens[p.id]} na frente
+                    ▲ {ultrapassagens[p.id]} na frente
                   </span>
                 )}
                 {p.data_prevista && (
@@ -274,6 +284,7 @@ export default function Pedidos() {
       {modal && (
         <PedidoFormModal
           pedido={modal === 'novo' ? null : modal}
+          tipoNovo={tipo}
           onFechar={() => setModal(null)}
           onSalvo={recarregar}
         />

@@ -109,7 +109,7 @@ export default function Arquivo() {
                     </span>
                   ) : p.status === 'arquivado' ? (
                     <span className="rounded-full bg-violet-900 px-2.5 py-1 font-medium text-violet-300">
-                      📥 Arquivado
+                      ◆ Arquivado
                     </span>
                   ) : (
                     <span className="rounded-full bg-slate-800 px-2.5 py-1 font-medium text-slate-400">
