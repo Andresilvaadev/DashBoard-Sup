@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Etapa } from '../types'
+import type { Etapa, FluxoEtapa } from '../types'
 
 export function useEtapas() {
   const [etapas, setEtapas] = useState<Etapa[]>([])
@@ -25,12 +25,17 @@ export function useEtapas() {
     }
   }, [])
 
+  const etapasDoFluxo = (fluxo: FluxoEtapa) =>
+    etapas.filter((e) => e.ativo && (e.fluxo ?? 'producao') === fluxo)
+
   return {
     etapas,
     /** etapas ativas do fluxo de PRODUÇÃO (aba Pedidos) */
-    etapasAtivas: etapas.filter((e) => e.ativo && (e.fluxo ?? 'producao') === 'producao'),
+    etapasAtivas: etapasDoFluxo('producao'),
     /** etapas ativas do fluxo de CRIAÇÃO de arte (aba Criação) */
-    etapasCriacao: etapas.filter((e) => e.ativo && e.fluxo === 'criacao'),
+    etapasCriacao: etapasDoFluxo('criacao'),
+    /** etapas ativas de um fluxo qualquer (producao/criacao/caneca) */
+    etapasDoFluxo,
     loading,
     recarregar: carregar,
   }

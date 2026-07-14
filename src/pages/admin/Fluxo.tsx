@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { useToast } from '../../contexts/ToastContext'
 import { useEtapas } from '../../hooks/useEtapas'
+import { ABAS } from '../../lib/abas'
 import { supabase } from '../../lib/supabase'
-import type { Etapa } from '../../types'
+import type { Etapa, FluxoEtapa } from '../../types'
 
 /** Admin: criar, editar, reordenar e desativar etapas dos fluxos (produção e criação). */
 export default function Fluxo() {
   const toast = useToast()
   const { etapas: todasEtapas, recarregar } = useEtapas()
-  const [fluxo, setFluxo] = useState<'producao' | 'criacao'>('producao')
+  const [fluxo, setFluxo] = useState<FluxoEtapa>('producao')
   const [editando, setEditando] = useState<Etapa | 'nova' | null>(null)
   const [nome, setNome] = useState('')
   const [cor, setCor] = useState('#ec1c24')
@@ -92,24 +93,19 @@ export default function Fluxo() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* seletor do fluxo: produção (aba Pedidos) x criação (aba Criação) */}
-        <div className="flex rounded-lg border border-slate-700 p-0.5">
-          <button
-            onClick={() => setFluxo('producao')}
-            className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-              fluxo === 'producao' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Produção (Pedidos)
-          </button>
-          <button
-            onClick={() => setFluxo('criacao')}
-            className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-              fluxo === 'criacao' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Criação de arte
-          </button>
+        {/* seletor do fluxo: uma opção por aba (Pedidos, Criação, Canecas…) */}
+        <div className="flex flex-wrap rounded-lg border border-slate-700 p-0.5">
+          {ABAS.map((a) => (
+            <button
+              key={a.fluxo}
+              onClick={() => setFluxo(a.fluxo)}
+              className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                fluxo === a.fluxo ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {a.label}
+            </button>
+          ))}
         </div>
         <button
           onClick={() => abrir('nova')}

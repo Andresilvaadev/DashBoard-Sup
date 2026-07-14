@@ -23,6 +23,11 @@ const icones = {
       <circle cx="11" cy="11" r="2" />
     </svg>
   ),
+  canecas: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
+      <path d="M4 5h11v11a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3zM15 8h3a2 2 0 0 1 0 4h-3" />
+    </svg>
+  ),
   arquivo: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
       <rect x="3" y="4" width="18" height="4" rx="1.5" />
@@ -37,6 +42,17 @@ const icones = {
   estoque: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
       <path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10" />
+    </svg>
+  ),
+  capacidade: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
+      <path d="M12 21a9 9 0 1 1 9-9M12 12l5-3" />
+      <path d="M12 3v2M4.6 6.6l1.4 1.4M3 12h2M19 12h2M18 6.6l-1.4 1.4" />
+    </svg>
+  ),
+  perdas: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01" />
     </svg>
   ),
   admin: (
@@ -54,8 +70,11 @@ export default function Layout() {
     { to: '/', label: 'Dashboard', icone: icones.dashboard },
     { to: '/pedidos', label: 'Pedidos', icone: icones.pedidos },
     { to: '/criacao', label: 'Criação', icone: icones.criacao },
+    { to: '/canecas', label: 'Canecas', icone: icones.canecas },
     { to: '/arquivo', label: 'Arquivo', icone: icones.arquivo },
     { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
+    { to: '/capacidade', label: 'Capacidade', icone: icones.capacidade },
+    { to: '/perdas', label: 'Perdas', icone: icones.perdas },
     { to: '/estoque', label: 'Estoque', icone: icones.estoque },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icone: icones.admin }] : []),
   ]
@@ -114,15 +133,15 @@ export default function Layout() {
         </div>
       </main>
 
-      {/* Navegação inferior (mobile) */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-800 bg-slate-900 md:hidden">
+      {/* Navegação inferior (mobile) — rolável na horizontal para caber todas as abas */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-slate-800 bg-slate-900 md:hidden">
         {links.map((l) => (
           <NavLink
             key={l.to}
             to={l.to}
             end={l.to === '/'}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium ${
+              `flex min-w-[4.2rem] flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium ${
                 isActive ? 'text-red-400' : 'text-slate-500'
               }`
             }

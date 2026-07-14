@@ -35,8 +35,11 @@ create table if not exists public.etapas (
   cor text not null default '#38bdf8',
   palavras_chave text[] not null default '{}',  -- usadas pelo comando de voz
   ativo boolean not null default true,
-  -- 'producao' = aba Pedidos; 'criacao' = aba Pedidos para criação (arte)
-  fluxo text not null default 'producao' check (fluxo in ('producao','criacao')),
+  -- fluxo da etapa: 'producao' (Pedidos), 'criacao' (Criação de arte), 'caneca' (Canecas)
+  fluxo text not null default 'producao' check (fluxo in ('producao','criacao','caneca')),
+  -- capacidade = teto (máx/dia); meta = alvo diário (0 = não definida)
+  capacidade int not null default 0,
+  meta int not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -62,6 +65,15 @@ do $$ begin
       ('Em aprovação',       3, '#a78bfa', array['aprovacao'],            'criacao'),
       ('Arte aprovada',      4, '#34d399', array['aprovada','aprovado'],  'criacao');
   end if;
+  -- etapas iniciais do fluxo de canecas (aba Canecas)
+  if not exists (select 1 from public.etapas where fluxo = 'caneca') then
+    insert into public.etapas (nome, ordem, cor, palavras_chave, fluxo) values
+      ('Pedido criado', 1, '#94a3b8', array['criado','novo'],       'caneca'),
+      ('Impressão',     2, '#818cf8', array['impressao','imprimir'], 'caneca'),
+      ('Sublimação',    3, '#f59e0b', array['sublimacao','prensa'],  'caneca'),
+      ('Embalagem',     4, '#34d399', array['embalagem','embalar'],  'caneca'),
+      ('Entregue',      5, '#22c55e', array['entregue','entrega'],   'caneca');
+  end if;
 end $$;
 
 -- ---------- PEDIDOS ----------
@@ -73,8 +85,8 @@ create table if not exists public.pedidos (
   quantidade int not null default 1,
   prioridade text not null default 'normal' check (prioridade in ('baixa','normal','alta','urgente')),
   status text not null default 'em_andamento' check (status in ('em_andamento','concluido','cancelado','arquivado')),
-  -- 'pronto' = arte já pronta (aba Pedidos); 'criacao' = arte a criar (aba Criação)
-  tipo text not null default 'pronto' check (tipo in ('pronto','criacao')),
+  -- aba do pedido: 'pronto' (Pedidos), 'criacao' (Criação de arte), 'caneca' (Canecas)
+  tipo text not null default 'pronto' check (tipo in ('pronto','criacao','caneca')),
   etapa_atual_id uuid references public.etapas(id),
   data_prevista date,
   concluido_em timestamptz,
@@ -167,14 +179,15 @@ begin
   insert into public.historico (pedido_id, etapa_id, funcionario_id, observacao, via_voz)
   values (v_pedido.id, p_etapa_id, v_uid, coalesce(p_observacao, ''), p_via_voz);
 
-  -- última etapa DO MESMO FLUXO => conclui apenas no fluxo de produção
+  -- conclui ao chegar na última etapa de QUALQUER fluxo, exceto 'criacao'
+  -- (arte aprovada não é entrega)
   select max(ordem) into v_ultima_ordem
     from public.etapas where ativo and fluxo = v_etapa.fluxo;
 
   update public.pedidos
      set etapa_atual_id = p_etapa_id,
-         status = case when v_etapa.fluxo = 'producao' and v_etapa.ordem >= v_ultima_ordem then 'concluido' else 'em_andamento' end,
-         concluido_em = case when v_etapa.fluxo = 'producao' and v_etapa.ordem >= v_ultima_ordem then now() else null end,
+         status = case when v_etapa.fluxo <> 'criacao' and v_etapa.ordem >= v_ultima_ordem then 'concluido' else 'em_andamento' end,
+         concluido_em = case when v_etapa.fluxo <> 'criacao' and v_etapa.ordem >= v_ultima_ordem then now() else null end,
          cancelado_em = null
    where id = v_pedido.id;
 
@@ -195,14 +208,15 @@ returns uuid language plpgsql security definer set search_path = public as $$
 declare
   v_id uuid;
   v_primeira uuid;
+  v_fluxo text := case when p_tipo = 'pronto' then 'producao' else p_tipo end;
 begin
   if not public.is_admin() then
     raise exception 'Apenas administradores podem criar pedidos';
   end if;
 
-  -- o pedido nasce na primeira etapa do SEU fluxo (produção ou criação)
+  -- o pedido nasce na primeira etapa do SEU fluxo
   select id into v_primeira from public.etapas
-   where ativo and fluxo = (case when p_tipo = 'criacao' then 'criacao' else 'producao' end)
+   where ativo and fluxo = v_fluxo
    order by ordem limit 1;
 
   insert into public.pedidos (numero, cliente, descricao, quantidade, prioridade, etapa_atual_id, data_prevista, tipo, created_by)
@@ -411,6 +425,59 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   alter publication supabase_realtime add table public.estoque_itens;
 exception when duplicate_object then null; end $$;
+
+-- ============================================================
+-- CONFIGURAÇÕES (chave/valor) — ex.: capacidade diária de produção
+-- ============================================================
+create table if not exists public.config (
+  chave text primary key,
+  valor text not null default '',
+  atualizado_em timestamptz not null default now()
+);
+
+insert into public.config (chave, valor) values ('capacidade_diaria', '80')
+on conflict (chave) do nothing;
+insert into public.config (chave, valor) values ('meta_diaria', '0')
+on conflict (chave) do nothing;
+
+alter table public.config enable row level security;
+drop policy if exists "config_select" on public.config;
+drop policy if exists "config_admin_insert" on public.config;
+drop policy if exists "config_admin_update" on public.config;
+create policy "config_select" on public.config for select to authenticated using (true);
+create policy "config_admin_insert" on public.config for insert to authenticated with check (public.is_admin());
+create policy "config_admin_update" on public.config for update to authenticated using (public.is_admin());
+
+-- ============================================================
+-- PERDAS DE MATERIAL
+-- ============================================================
+create table if not exists public.perdas (
+  id uuid primary key default gen_random_uuid(),
+  pedido_id uuid references public.pedidos(id) on delete set null,
+  funcionario_id uuid references public.profiles(id),
+  material text not null,
+  quantidade numeric not null default 0,
+  unidade text not null default 'un',
+  valor numeric not null default 0,          -- valor financeiro perdido (R$)
+  motivo text not null default '',
+  observacoes text not null default '',
+  created_at timestamptz not null default now()
+);
+create index if not exists perdas_created_idx on public.perdas (created_at);
+create index if not exists perdas_funcionario_idx on public.perdas (funcionario_id);
+
+alter table public.perdas enable row level security;
+drop policy if exists "perdas_select" on public.perdas;
+drop policy if exists "perdas_insert" on public.perdas;
+drop policy if exists "perdas_admin_update" on public.perdas;
+drop policy if exists "perdas_admin_delete" on public.perdas;
+create policy "perdas_select" on public.perdas for select to authenticated using (true);
+create policy "perdas_insert" on public.perdas for insert to authenticated with check (funcionario_id = auth.uid());
+create policy "perdas_admin_update" on public.perdas for update to authenticated using (public.is_admin());
+create policy "perdas_admin_delete" on public.perdas for delete to authenticated using (public.is_admin());
+
+do $$ begin alter publication supabase_realtime add table public.perdas; exception when duplicate_object then null; end $$;
+do $$ begin alter publication supabase_realtime add table public.config; exception when duplicate_object then null; end $$;
 
 -- ============================================================
 -- STORAGE: bucket de anexos

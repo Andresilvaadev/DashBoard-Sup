@@ -1,8 +1,10 @@
 export type Role = 'admin' | 'funcionario'
 export type StatusPedido = 'em_andamento' | 'concluido' | 'cancelado' | 'arquivado'
 export type Prioridade = 'baixa' | 'normal' | 'alta' | 'urgente'
-/** 'pronto' = arte já pronta (aba Pedidos); 'criacao' = arte a criar (aba Criação) */
-export type TipoPedido = 'pronto' | 'criacao'
+/** aba do pedido: Pedidos (pronto), Criação de arte (criacao), Canecas (caneca) */
+export type TipoPedido = 'pronto' | 'criacao' | 'caneca'
+/** fluxo de etapas: produção (Pedidos), criação (arte), caneca (Canecas) */
+export type FluxoEtapa = 'producao' | 'criacao' | 'caneca'
 
 export interface Profile {
   id: string
@@ -20,8 +22,11 @@ export interface Etapa {
   cor: string
   palavras_chave: string[]
   ativo: boolean
-  /** 'producao' = aba Pedidos; 'criacao' = aba Pedidos para criação */
-  fluxo: 'producao' | 'criacao'
+  fluxo: FluxoEtapa
+  /** capacidade (teto) da etapa em peças/dia (0 = não definida) */
+  capacidade: number
+  /** meta (alvo) diária da etapa em peças/dia (0 = não definida) */
+  meta: number
 }
 
 export interface Pedido {
@@ -77,6 +82,22 @@ export interface Meta {
   etapa_id: string | null
   quantidade: number
   etapa?: Etapa | null
+}
+
+export interface Perda {
+  id: string
+  pedido_id: string | null
+  funcionario_id: string | null
+  material: string
+  quantidade: number
+  unidade: string
+  /** valor financeiro perdido (R$) */
+  valor: number
+  motivo: string
+  observacoes: string
+  created_at: string
+  funcionario?: Pick<Profile, 'id' | 'nome'> | null
+  pedido?: Pick<Pedido, 'id' | 'numero' | 'cliente'> | null
 }
 
 export interface EstoqueCategoria {

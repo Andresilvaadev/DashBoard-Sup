@@ -8,6 +8,7 @@ import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Pedido, TipoPedido } from '../types'
+import { abaDoTipo, fluxoDoTipo } from '../lib/abas'
 import { urlsAnexos } from '../lib/anexos'
 import { mapaUltrapassagens } from '../utils/fila'
 import { removerAnexosStorage } from '../utils/storage'
@@ -25,9 +26,9 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
   const { isAdmin } = useAuth()
   const toast = useToast()
   const { pedidos, recarregar } = usePedidos()
-  const { etapas, etapasAtivas, etapasCriacao } = useEtapas()
-  // cada aba usa o seu fluxo de etapas (produção x criação de arte)
-  const etapasDaAba = tipo === 'criacao' ? etapasCriacao : etapasAtivas
+  const { etapas, etapasDoFluxo } = useEtapas()
+  // cada aba usa o seu fluxo de etapas (produção / criação / caneca)
+  const etapasDaAba = etapasDoFluxo(fluxoDoTipo(tipo))
   const [busca, setBusca] = useState('')
   const [filtroEtapa, setFiltroEtapa] = useState('')
   const [modal, setModal] = useState<'novo' | Pedido | null>(null)
@@ -120,7 +121,7 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold md:text-2xl">
-            {tipo === 'criacao' ? 'Pedidos para criação' : 'Pedidos'}
+            {tipo === 'criacao' ? 'Pedidos para criação' : abaDoTipo(tipo).label}
           </h1>
           <p className="text-sm text-slate-400">
             {filtrados.length} pedido(s)

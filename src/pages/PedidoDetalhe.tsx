@@ -6,6 +6,7 @@ import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Anexo, Historico, Pedido, StatusPedido } from '../types'
+import { ABAS, abaDoTipo, fluxoDoTipo, type Aba } from '../lib/abas'
 import { enviarAnexo, urlAnexo, urlsAnexos } from '../lib/anexos'
 import { pedidosQuePassaramNaFrente } from '../utils/fila'
 import { comprimirImagem } from '../utils/imagem'
@@ -17,7 +18,7 @@ export default function PedidoDetalhe() {
   const navigate = useNavigate()
   const toast = useToast()
   const { isAdmin } = useAuth()
-  const { etapas, etapasAtivas, etapasCriacao } = useEtapas()
+  const { etapas, etapasDoFluxo } = useEtapas()
   const { pedidos: todosPedidos } = usePedidos()
   const [pedido, setPedido] = useState<Pedido | null>(null)
   const [historico, setHistorico] = useState<Historico[]>([])
@@ -118,34 +119,37 @@ export default function PedidoDetalhe() {
     }
   }
 
-  /** Arte pronta: muda o pedido para a aba Pedidos e o põe na 1ª etapa da produção */
-  const enviarParaProducao = async () => {
+  /** Move o pedido para outra aba, colocando-o na 1ª etapa do fluxo de destino */
+  const moverParaAba = async (destino: Aba) => {
     if (!pedido) return
-    const primeira = etapasAtivas[0]
-    if (!primeira) return
+    const primeira = etapasDoFluxo(destino.fluxo)[0]
+    if (!primeira) {
+      toast(`A aba "${destino.label}" ainda não tem etapas configuradas.`, 'erro')
+      return
+    }
     if (
       !confirm(
-        `Arte do pedido ${pedido.numero} pronta? Ele vai para a aba Pedidos, na etapa "${primeira.nome}".`,
+        `Mover o pedido ${pedido.numero} para a aba "${destino.label}"? Ele vai para a etapa "${primeira.nome}".`,
       )
     )
       return
     setMovendo(true)
     const { error: e1 } = await supabase
       .from('pedidos')
-      .update({ tipo: 'pronto' })
+      .update({ tipo: destino.tipo })
       .eq('id', pedido.id)
     const { error: e2 } = e1
       ? { error: e1 }
       : await supabase.rpc('mover_pedido', {
           p_numero: pedido.numero,
           p_etapa_id: primeira.id,
-          p_observacao: 'Arte pronta — enviado para produção',
+          p_observacao: `Movido para a aba ${destino.label}`,
           p_via_voz: false,
         })
     setMovendo(false)
     if (e1 || e2) toast((e1 ?? e2)!.message, 'erro')
     else {
-      toast('Arte pronta! Pedido enviado para a aba Pedidos.', 'sucesso')
+      toast(`Pedido movido para ${destino.label}.`, 'sucesso')
       carregar()
     }
   }
@@ -263,9 +267,9 @@ export default function PedidoDetalhe() {
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">Pedido #{pedido.numero}</h1>
-          {(pedido.tipo ?? 'pronto') === 'criacao' && (
+          {(pedido.tipo ?? 'pronto') !== 'pronto' && (
             <span className="rounded-full bg-fuchsia-900 px-3 py-1 text-xs font-medium text-fuchsia-300">
-              ◆ Criação de arte
+              ◆ {abaDoTipo(pedido.tipo).label}
             </span>
           )}
           {pedido.status === 'concluido' ? (
@@ -370,17 +374,17 @@ export default function PedidoDetalhe() {
       )}
 
       {/* Mover etapa (pedido cancelado/arquivado não se move; reative antes).
-          Cada aba tem seu fluxo: produção ou criação de arte. */}
+          Cada aba tem seu próprio fluxo de etapas. */}
       {pedido.status !== 'cancelado' && pedido.status !== 'arquivado' && (
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
         <h2 className="mb-3 text-sm font-semibold">
           Mover para etapa
-          {(pedido.tipo ?? 'pronto') === 'criacao' && (
-            <span className="ml-2 text-xs font-normal text-fuchsia-300">(fluxo de criação)</span>
-          )}
+          <span className="ml-2 text-xs font-normal text-slate-500">
+            (aba {abaDoTipo(pedido.tipo).label})
+          </span>
         </h2>
         <div className="flex flex-wrap gap-2">
-          {((pedido.tipo ?? 'pronto') === 'criacao' ? etapasCriacao : etapasAtivas).map((e) => {
+          {etapasDoFluxo(fluxoDoTipo(pedido.tipo)).map((e) => {
             const atual = e.id === pedido.etapa_atual_id
             return (
               <button
@@ -399,14 +403,24 @@ export default function PedidoDetalhe() {
             )
           })}
         </div>
-        {(pedido.tipo ?? 'pronto') === 'criacao' && etapasAtivas.length > 0 && (
-          <button
-            onClick={() => void enviarParaProducao()}
-            disabled={movendo}
-            className="mt-3 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-semibold text-emerald-400 hover:bg-emerald-950 disabled:opacity-40"
-          >
-            ✓ Arte pronta — enviar para Pedidos
-          </button>
+
+        {/* Mover para outra aba (muda o fluxo e reinicia na 1ª etapa do destino) */}
+        {isAdmin && (
+          <div className="mt-4 border-t border-slate-800 pt-3">
+            <p className="mb-2 text-xs font-medium text-slate-400">Mover para outra aba</p>
+            <div className="flex flex-wrap gap-2">
+              {ABAS.filter((a) => a.tipo !== (pedido.tipo ?? 'pronto')).map((a) => (
+                <button
+                  key={a.tipo}
+                  onClick={() => void moverParaAba(a)}
+                  disabled={movendo}
+                  className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:border-sky-600 hover:text-sky-300 disabled:opacity-40"
+                >
+                  → {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
       )}

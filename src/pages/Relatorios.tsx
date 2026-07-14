@@ -4,9 +4,10 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import StatCard from '../components/StatCard'
+import { useConfig } from '../hooks/useConfig'
 import { useEtapas } from '../hooks/useEtapas'
 import { supabase } from '../lib/supabase'
-import type { Historico, Meta, Pedido } from '../types'
+import type { Historico, Meta, Pedido, Perda } from '../types'
 import type { TabelaExport } from '../utils/exportar'
 import { formatarData, formatarDataHora, formatarDuracao } from '../utils/tempo'
 
@@ -37,9 +38,11 @@ function inicioDoPeriodo(p: Periodo): Date {
 
 export default function Relatorios() {
   const { etapasAtivas, etapasCriacao } = useEtapas()
+  const { capacidadeDiaria } = useConfig()
   const [periodo, setPeriodo] = useState<Periodo>('semana')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [historico, setHistorico] = useState<Historico[]>([])
+  const [perdas, setPerdas] = useState<Perda[]>([])
   const [metas, setMetas] = useState<Meta[]>([])
   const [carregando, setCarregando] = useState(true)
   // qual lista de pedidos está aberta (clique nos cards de indicadores)
@@ -58,10 +61,15 @@ export default function Relatorios() {
         .select('*, etapa:etapas(*), funcionario:profiles(id, nome)')
         .gte('entrada', inicio),
       supabase.from('metas').select('*').gte('data', inicioData),
-    ]).then(([p, h, m]) => {
+      supabase
+        .from('perdas')
+        .select('*, funcionario:profiles(id, nome)')
+        .gte('created_at', inicio),
+    ]).then(([p, h, m, pr]) => {
       setPedidos((p.data as Pedido[]) ?? [])
       setHistorico((h.data as Historico[]) ?? [])
       setMetas((m.data as Meta[]) ?? [])
+      setPerdas((pr.data as Perda[]) ?? [])
       setCarregando(false)
     })
   }, [periodo])
@@ -193,6 +201,39 @@ export default function Relatorios() {
         concluidos: v,
       }))
 
+    // ---- PAINEL EXECUTIVO ----
+    // gargalo: etapa de produção com maior tempo médio
+    const gargalo = porEtapa
+      .filter((e) => e.tempoMedio != null)
+      .sort((a, b) => (b.tempoMedio ?? 0) - (a.tempoMedio ?? 0))[0]
+
+    // perdas do período
+    const perdasValor = perdas.reduce((a, p) => a + (p.valor || 0), 0)
+
+    // capacidade média utilizada no período (peças concluídas/dia ÷ capacidade)
+    const pecasConcluidas = concluidos.reduce((a, p) => a + (p.quantidade || 0), 0)
+    const capacidadeMedia =
+      capacidadeDiaria > 0 ? Math.round(((pecasConcluidas / dias) / capacidadeDiaria) * 100) : null
+
+    // funcionário com menor índice de perdas (entre quem trabalhou no período)
+    const trabalhouPorFunc = new Map<string, { nome: string; pedidos: Set<string> }>()
+    for (const h of historico) {
+      if (!h.funcionario) continue
+      const atual = trabalhouPorFunc.get(h.funcionario.id) ?? { nome: h.funcionario.nome, pedidos: new Set<string>() }
+      atual.pedidos.add(h.pedido_id)
+      trabalhouPorFunc.set(h.funcionario.id, atual)
+    }
+    const perdasPorFunc = new Map<string, number>()
+    for (const p of perdas) {
+      if (p.funcionario_id) perdasPorFunc.set(p.funcionario_id, (perdasPorFunc.get(p.funcionario_id) ?? 0) + 1)
+    }
+    const menorIndicePerdas = [...trabalhouPorFunc.entries()]
+      .map(([id, f]) => ({
+        nome: f.nome,
+        indice: f.pedidos.size > 0 ? ((perdasPorFunc.get(id) ?? 0) / f.pedidos.size) * 100 : 0,
+      }))
+      .sort((a, b) => a.indice - b.indice)[0]
+
     return {
       iniciados,
       concluidos,
@@ -200,6 +241,11 @@ export default function Relatorios() {
       atrasados,
       cancelados,
       arquivados,
+      gargalo,
+      perdasQtd: perdas.length,
+      perdasValor,
+      capacidadeMedia,
+      menorIndicePerdas,
       porEtapa,
       porEtapaCriacao,
       tempoMedioCriacao,
@@ -212,7 +258,7 @@ export default function Relatorios() {
       totalMeta,
       evolucao,
     }
-  }, [pedidos, historico, metas, etapasAtivas, etapasCriacao, periodo])
+  }, [pedidos, historico, metas, perdas, etapasAtivas, etapasCriacao, capacidadeDiaria, periodo])
 
   const labelPeriodo = PERIODOS.find((p) => p.id === periodo)!.label
 
@@ -233,6 +279,11 @@ export default function Relatorios() {
         ['Meta atingida', rel.pctMeta != null ? `${rel.pctMeta}%` : '—'],
         ['Funcionário mais produtivo', rel.rankFunc[0]?.[0] ?? '—'],
         ['Setor mais produtivo', rel.setorTop?.nome ?? '—'],
+        ['Gargalo da produção', rel.gargalo ? `${rel.gargalo.nome} (${formatarDuracao(rel.gargalo.tempoMedio)})` : '—'],
+        ['Perdas do período', rel.perdasQtd],
+        ['Valor perdido', rel.perdasValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })],
+        ['Capacidade utilizada (média)', rel.capacidadeMedia != null ? `${rel.capacidadeMedia}%` : '—'],
+        ['Menor índice de perdas', rel.menorIndicePerdas?.nome ?? '—'],
       ],
     },
     {
@@ -331,6 +382,54 @@ export default function Relatorios() {
         </div>
       ) : (
         <>
+          {/* Painel executivo: gargalo, perdas, capacidade e destaques */}
+          <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+            <h2 className="mb-3 text-sm font-semibold">Resumo executivo — {labelPeriodo.toLowerCase()}</h2>
+            {rel.gargalo && (
+              <div className="mb-3 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2.5 text-sm">
+                <span className="font-semibold text-amber-300">Gargalo identificado: {rel.gargalo.nome}.</span>{' '}
+                <span className="text-slate-300">
+                  Tempo médio: {formatarDuracao(rel.gargalo.tempoMedio)}.
+                </span>{' '}
+                <span className="text-xs text-slate-500">
+                  (etapa de produção mais demorada do período)
+                </span>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatCard
+                titulo="Perdas do período"
+                valor={rel.perdasQtd}
+                detalhe={rel.perdasValor > 0 ? rel.perdasValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'sem valor registrado'}
+                cor={rel.perdasQtd > 0 ? 'text-rose-400' : 'text-emerald-400'}
+              />
+              <StatCard
+                titulo="Capacidade utilizada"
+                valor={rel.capacidadeMedia != null ? `${rel.capacidadeMedia}%` : '—'}
+                detalhe={rel.capacidadeMedia == null ? 'defina em Capacidade' : 'média do período'}
+                cor={
+                  rel.capacidadeMedia != null && rel.capacidadeMedia > 100
+                    ? 'text-rose-400'
+                    : rel.capacidadeMedia != null && rel.capacidadeMedia >= 85
+                      ? 'text-amber-400'
+                      : 'text-emerald-400'
+                }
+              />
+              <StatCard
+                titulo="Mais produtivo"
+                valor={<span className="text-base">{rel.rankFunc[0]?.[0] ?? '—'}</span>}
+                detalhe={rel.rankFunc[0] ? `${rel.rankFunc[0][1]} etapas movimentadas` : undefined}
+                cor="text-emerald-400"
+              />
+              <StatCard
+                titulo="Menor índice de perdas"
+                valor={<span className="text-base">{rel.menorIndicePerdas?.nome ?? '—'}</span>}
+                detalhe={rel.menorIndicePerdas ? `${rel.menorIndicePerdas.indice.toFixed(1)}% de perdas` : undefined}
+                cor="text-violet-400"
+              />
+            </div>
+          </div>
+
           {/* Produção geral — clique em um card para ver a lista de pedidos */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             {(

@@ -25,7 +25,8 @@ export default function PedidoFormModal({
   const [descricao, setDescricao] = useState(pedido?.descricao ?? '')
   const [quantidade, setQuantidade] = useState(pedido?.quantidade?.toString() ?? '1')
   const [prioridade, setPrioridade] = useState<Prioridade>(pedido?.prioridade ?? 'normal')
-  const [tipo, setTipo] = useState<TipoPedido>(pedido?.tipo ?? tipoNovo)
+  // aba do pedido: ao editar mantém a atual; ao criar, herda a aba de origem
+  const tipo: TipoPedido = pedido?.tipo ?? tipoNovo
   const [status, setStatus] = useState<StatusPedido>(pedido?.status ?? 'em_andamento')
   const [dataPrevista, setDataPrevista] = useState(pedido?.data_prevista ?? '')
   const [arquivos, setArquivos] = useState<File[]>([])
@@ -236,31 +237,21 @@ export default function PedidoFormModal({
         </div>
 
         {editando && (
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-slate-400">Status</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as StatusPedido)}
-                className={inputCls}
-              >
-                <option value="em_andamento">Em andamento</option>
-                <option value="concluido">Concluído</option>
-                <option value="arquivado">Arquivado (sem concluir)</option>
-                <option value="cancelado">Cancelado</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-400">Aba</label>
-              <select
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value as TipoPedido)}
-                className={inputCls}
-              >
-                <option value="pronto">Pedidos (arte pronta)</option>
-                <option value="criacao">Criação de arte</option>
-              </select>
-            </div>
+          <div className="mt-3">
+            <label className="text-xs font-medium text-slate-400">Status</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as StatusPedido)}
+              className={inputCls}
+            >
+              <option value="em_andamento">Em andamento</option>
+              <option value="concluido">Concluído</option>
+              <option value="arquivado">Arquivado (sem concluir)</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Para mover este pedido para outra aba, use "Mover para outra aba" na tela do pedido.
+            </p>
           </div>
         )}
 

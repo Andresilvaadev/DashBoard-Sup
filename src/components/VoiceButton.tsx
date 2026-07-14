@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
 import { useEtapas } from '../hooks/useEtapas'
+import { ABAS } from '../lib/abas'
 import {
   interpretarComando,
   interpretarComandoEstoque,
@@ -34,7 +35,7 @@ const MENSAGENS_ERRO: Record<string, string> = {
 export default function VoiceButton() {
   const toast = useToast()
   const { pathname } = useLocation()
-  const { etapasAtivas, etapasCriacao } = useEtapas()
+  const { etapasDoFluxo } = useEtapas()
   const [fase, setFase] = useState<Fase>('ocioso')
   const [comando, setComando] = useState<ComandoVoz | null>(null)
   const [comandoEstoque, setComandoEstoque] = useState<ComandoEstoque | null>(null)
@@ -42,16 +43,25 @@ export default function VoiceButton() {
   const [suportado, setSuportado] = useState(true)
   const recRef = useRef<SpeechRecognition | null>(null)
 
+  // qual aba de pedidos está aberta (pela rota), se houver
+  const abaAtual = pathname.startsWith('/criacao')
+    ? ABAS.find((a) => a.tipo === 'criacao')
+    : pathname.startsWith('/canecas')
+      ? ABAS.find((a) => a.tipo === 'caneca')
+      : pathname.startsWith('/pedidos')
+        ? ABAS.find((a) => a.tipo === 'pronto')
+        : undefined
+
   // o microfone só aparece (e age) nas telas em que é usado
   const modo: Modo | null = pathname.startsWith('/estoque')
     ? 'estoque'
-    : pathname.startsWith('/pedidos') || pathname.startsWith('/criacao')
+    : abaAtual
       ? 'pedidos'
       : null
 
   // refs estáveis para uso dentro dos callbacks do reconhecedor
-  // (na aba Criação, os comandos de voz usam as etapas do fluxo de criação)
-  const etapasDaRota = pathname.startsWith('/criacao') ? etapasCriacao : etapasAtivas
+  // (cada aba usa as etapas do seu próprio fluxo)
+  const etapasDaRota = abaAtual ? etapasDoFluxo(abaAtual.fluxo) : []
   const etapasRef = useRef(etapasDaRota)
   etapasRef.current = etapasDaRota
   const modoRef = useRef(modo)
