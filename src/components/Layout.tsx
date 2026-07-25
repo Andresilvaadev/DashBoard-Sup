@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import VoiceButton from './VoiceButton'
@@ -26,6 +27,12 @@ const icones = {
   canecas: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
       <path d="M4 5h11v11a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3zM15 8h3a2 2 0 0 1 0 4h-3" />
+    </svg>
+  ),
+  semana: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h.01" />
     </svg>
   ),
   arquivo: (
@@ -71,6 +78,7 @@ export default function Layout() {
     { to: '/pedidos', label: 'Pedidos', icone: icones.pedidos },
     { to: '/criacao', label: 'Criação', icone: icones.criacao },
     { to: '/canecas', label: 'Canecas', icone: icones.canecas },
+    { to: '/semana', label: 'Semana', icone: icones.semana },
     { to: '/arquivo', label: 'Arquivo', icone: icones.arquivo },
     { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
     { to: '/capacidade', label: 'Capacidade', icone: icones.capacidade },
@@ -129,7 +137,17 @@ export default function Layout() {
         </header>
 
         <div className="p-4 md:p-6">
-          <Outlet />
+          {/* Suspense interno: ao navegar, só o conteúdo mostra o spinner — a
+              sidebar e a navegação permanecem no lugar */}
+          <Suspense
+            fallback={
+              <div className="flex justify-center py-20">
+                <span className="h-8 w-8 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </div>
       </main>
 

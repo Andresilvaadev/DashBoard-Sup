@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 
-export default function StatCard({
+// memo: os cards aparecem em grades grandes — só re-renderizam quando as
+// próprias props mudam, não a cada render da página
+export default memo(function StatCard({
   titulo,
   valor,
   detalhe,
@@ -23,4 +25,4 @@ export default function StatCard({
       {detalhe && <p className="mt-1 text-xs text-slate-500">{detalhe}</p>}
     </div>
   )
-}
+})

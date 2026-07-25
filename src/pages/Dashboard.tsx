@@ -26,14 +26,15 @@ export default function Dashboard() {
     inicioHoje.setHours(0, 0, 0, 0)
 
     const [hHoje, hSaidas, hRecente, m, funcs] = await Promise.all([
+      // só as colunas usadas nos cálculos (menos banda; histórico cresce muito)
       supabase
         .from('historico')
-        .select('*, etapa:etapas(*), funcionario:profiles(id, nome)')
+        .select('entrada, etapa_id, pedido_id, funcionario:profiles(id, nome)')
         .gte('entrada', inicioHoje.toISOString()),
       // etapas finalizadas hoje (a entrada pode ter sido em dias anteriores)
       supabase
         .from('historico')
-        .select('*')
+        .select('etapa_id, pedido_id, saida')
         .gte('saida', inicioHoje.toISOString()),
       supabase
         .from('historico')
@@ -43,7 +44,7 @@ export default function Dashboard() {
       supabase.from('metas').select('*').eq('data', hojeISO()),
       supabase.from('profiles').select('*').eq('ativo', true),
     ])
-    setHistoricoHoje((hHoje.data as Historico[]) ?? [])
+    setHistoricoHoje((hHoje.data as unknown as Historico[]) ?? [])
     setSaidasHoje((hSaidas.data as Historico[]) ?? [])
     setHistoricoRecente((hRecente.data as Historico[]) ?? [])
     setMetasHoje((m.data as Meta[]) ?? [])

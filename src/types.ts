@@ -100,6 +100,28 @@ export interface Perda {
   pedido?: Pick<Pedido, 'id' | 'numero' | 'cliente'> | null
 }
 
+/** Setor do planejamento da semana (criado pelo admin, ex.: Prensagem, Costura) */
+export interface SemanaSetor {
+  id: string
+  nome: string
+  cor: string
+  ordem: number
+  created_at: string
+}
+
+/** Item do planejamento da semana (referência ao pedido; ele continua na aba dele) */
+export interface PlanoSemana {
+  id: string
+  pedido_id: string | null
+  /** setor onde o trabalho deve acontecer */
+  setor_id: string | null
+  dia: string
+  texto: string
+  feito: boolean
+  created_by: string | null
+  created_at: string
+}
+
 export interface EstoqueCategoria {
   id: string
   nome: string

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
@@ -17,7 +17,8 @@ const prioridadeBorda: Record<string, string> = {
  * (desktop) ou use o botão ⇄ (celular). Comandos de voz e Realtime também
  * movem os cards automaticamente.
  */
-export default function KanbanBoard({
+// memo: o quadro só re-renderiza quando pedidos/etapas/fotos mudarem de fato
+export default memo(function KanbanBoard({
   pedidos,
   etapas,
   ultrapassagens,
@@ -239,4 +240,4 @@ export default function KanbanBoard({
       )}
     </>
   )
-}
+})

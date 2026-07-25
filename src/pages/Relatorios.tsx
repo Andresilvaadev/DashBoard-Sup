@@ -56,9 +56,10 @@ export default function Relatorios() {
     setCarregando(true)
     Promise.all([
       supabase.from('pedidos').select('*, etapa_atual:etapas(*)'),
+      // só as colunas usadas nos cálculos (menos banda; histórico cresce muito)
       supabase
         .from('historico')
-        .select('*, etapa:etapas(*), funcionario:profiles(id, nome)')
+        .select('entrada, saida, etapa_id, pedido_id, segundos_gastos, funcionario:profiles(id, nome)')
         .gte('entrada', inicio),
       supabase.from('metas').select('*').gte('data', inicioData),
       supabase
@@ -67,7 +68,7 @@ export default function Relatorios() {
         .gte('created_at', inicio),
     ]).then(([p, h, m, pr]) => {
       setPedidos((p.data as Pedido[]) ?? [])
-      setHistorico((h.data as Historico[]) ?? [])
+      setHistorico((h.data as unknown as Historico[]) ?? [])
       setMetas((m.data as Meta[]) ?? [])
       setPerdas((pr.data as Perda[]) ?? [])
       setCarregando(false)

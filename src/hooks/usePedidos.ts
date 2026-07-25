@@ -1,34 +1,84 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Pedido } from '../types'
 
-/** Lista de pedidos com atualização em tempo real (Supabase Realtime). */
-export function usePedidos() {
-  const [pedidos, setPedidos] = useState<Pedido[]>([])
-  const [loading, setLoading] = useState(true)
+// ============================================================
+// Loja compartilhada de pedidos (cache + realtime únicos).
+// Antes, cada componente que usava usePedidos() fazia SUA PRÓPRIA
+// consulta e abria SEU PRÓPRIO canal realtime. Agora existe UMA
+// consulta e UM canal para o app inteiro; todos os consumidores
+// leem do mesmo cache e re-renderizam juntos.
+// A interface do hook não mudou: { pedidos, loading, recarregar }.
+// ============================================================
 
-  const carregar = useCallback(async () => {
-    const { data } = await supabase
-      .from('pedidos')
-      .select('*, etapa_atual:etapas(*)')
-      .order('created_at', { ascending: false })
-    setPedidos((data as Pedido[]) ?? [])
-    setLoading(false)
+interface Estado {
+  pedidos: Pedido[]
+  loading: boolean
+  recarregar: () => Promise<void>
+}
+
+let estado: Estado = { pedidos: [], loading: true, recarregar }
+const ouvintes = new Set<() => void>()
+let consumidores = 0
+let canal: ReturnType<typeof supabase.channel> | null = null
+let carregando: Promise<void> | null = null
+
+function emitir(parcial: Partial<Estado>) {
+  estado = { ...estado, ...parcial }
+  for (const o of ouvintes) o()
+}
+
+async function recarregar(): Promise<void> {
+  // deduplica: se já há uma consulta em voo, reaproveita a mesma Promise
+  if (carregando) return carregando
+  carregando = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pedidos')
+        .select('*, etapa_atual:etapas(*)')
+        .order('created_at', { ascending: false })
+      if (!error) emitir({ pedidos: (data as Pedido[]) ?? [], loading: false })
+      else emitir({ loading: false })
+    } finally {
+      carregando = null
+    }
+  })()
+  return carregando
+}
+
+function conectar() {
+  if (canal) return
+  canal = supabase
+    .channel('pedidos-store')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => void recarregar())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'historico' }, () => void recarregar())
+    .subscribe()
+}
+
+function desconectar() {
+  if (canal) {
+    supabase.removeChannel(canal)
+    canal = null
+  }
+}
+
+function assinar(cb: () => void) {
+  ouvintes.add(cb)
+  return () => ouvintes.delete(cb)
+}
+
+/** Lista de pedidos com atualização em tempo real (cache único para o app todo). */
+export function usePedidos() {
+  useEffect(() => {
+    consumidores++
+    if (consumidores === 1) conectar()
+    // sempre revalida ao (re)montar — barato, pois é deduplicado
+    void recarregar()
+    return () => {
+      consumidores--
+      if (consumidores === 0) desconectar()
+    }
   }, [])
 
-  useEffect(() => {
-    carregar()
-    // nome único por instância (evita conflito quando o hook é montado em
-    // mais de um componente ou remontado pelo StrictMode)
-    const canal = supabase
-      .channel(`pedidos-rt-${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, carregar)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'historico' }, carregar)
-      .subscribe()
-    return () => {
-      supabase.removeChannel(canal)
-    }
-  }, [carregar])
-
-  return { pedidos, loading, recarregar: carregar }
+  return useSyncExternalStore(assinar, () => estado)
 }

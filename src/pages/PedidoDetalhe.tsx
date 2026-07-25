@@ -337,6 +337,12 @@ export default function PedidoDetalhe() {
               </button>
             )}
             <button
+              onClick={() => navigate(`/semana?pedido=${pedido.numero}`)}
+              className="rounded-lg border border-sky-800 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-950"
+            >
+              Planejar na semana
+            </button>
+            <button
               onClick={() => void excluirPedido()}
               className="rounded-lg border border-rose-900 px-3 py-1.5 text-xs font-medium text-rose-400 hover:bg-rose-950"
             >

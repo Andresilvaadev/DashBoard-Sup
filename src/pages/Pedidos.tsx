@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import KanbanBoard from '../components/KanbanBoard'
 import PedidoFormModal from '../components/PedidoFormModal'
@@ -95,22 +95,29 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
     })
   }, [pedidos, busca, filtroEtapa, tipo])
 
-  const excluir = async (p: Pedido) => {
-    if (
-      !confirm(
-        `Excluir DEFINITIVAMENTE o pedido ${p.numero} (${p.cliente})? O histórico e os anexos dele também serão apagados. Essa ação não pode ser desfeita.`,
+  // handlers estáveis (useCallback): permitem que o KanbanBoard memoizado
+  // não re-renderize à toa quando o estado local desta página muda
+  const excluir = useCallback(
+    async (p: Pedido) => {
+      if (
+        !confirm(
+          `Excluir DEFINITIVAMENTE o pedido ${p.numero} (${p.cliente})? O histórico e os anexos dele também serão apagados. Essa ação não pode ser desfeita.`,
+        )
       )
-    )
-      return
-    const { data, error } = await supabase.rpc('excluir_pedido', { p_numero: p.numero })
-    if (error) {
-      toast(error.message, 'erro')
-    } else {
-      await removerAnexosStorage((data as string[]) ?? [])
-      toast(`Pedido ${p.numero} excluído.`, 'sucesso')
-      recarregar()
-    }
-  }
+        return
+      const { data, error } = await supabase.rpc('excluir_pedido', { p_numero: p.numero })
+      if (error) {
+        toast(error.message, 'erro')
+      } else {
+        await removerAnexosStorage((data as string[]) ?? [])
+        toast(`Pedido ${p.numero} excluído.`, 'sucesso')
+        recarregar()
+      }
+    },
+    [toast, recarregar],
+  )
+  const abrirEdicao = useCallback((p: Pedido) => setModal(p), [])
+  const excluirClique = useCallback((p: Pedido) => void excluir(p), [excluir])
 
   const hoje = hojeISO()
   const inputCls =
@@ -184,8 +191,8 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
           etapas={etapasDaAba}
           ultrapassagens={ultrapassagens}
           fotos={fotos}
-          onEditar={isAdmin ? (p) => setModal(p) : undefined}
-          onExcluir={isAdmin ? (p) => void excluir(p) : undefined}
+          onEditar={isAdmin ? abrirEdicao : undefined}
+          onExcluir={isAdmin ? excluirClique : undefined}
         />
       )}
 

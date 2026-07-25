@@ -480,6 +480,75 @@ do $$ begin alter publication supabase_realtime add table public.perdas; excepti
 do $$ begin alter publication supabase_realtime add table public.config; exception when duplicate_object then null; end $$;
 
 -- ============================================================
+-- PLANEJAMENTO DA SEMANA (página "Semana")
+-- Referências a pedidos por setor (etapa) + dia + mensagem;
+-- o pedido continua na aba dele — aqui é só o plano.
+-- ============================================================
+-- setores próprios do planejamento (o admin cria os que usa)
+create table if not exists public.semana_setores (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  cor text not null default '#ec1c24',
+  ordem int not null default 0,
+  created_at timestamptz not null default now()
+);
+do $$ begin
+  if not exists (select 1 from public.semana_setores) then
+    insert into public.semana_setores (nome, cor, ordem) values
+      ('Prensagem', '#f59e0b', 1),
+      ('Costura',   '#fb923c', 2),
+      ('Impressão', '#818cf8', 3);
+  end if;
+end $$;
+alter table public.semana_setores enable row level security;
+drop policy if exists "ssetores_select" on public.semana_setores;
+drop policy if exists "ssetores_admin_insert" on public.semana_setores;
+drop policy if exists "ssetores_admin_update" on public.semana_setores;
+drop policy if exists "ssetores_admin_delete" on public.semana_setores;
+create policy "ssetores_select" on public.semana_setores for select to authenticated using (true);
+create policy "ssetores_admin_insert" on public.semana_setores for insert to authenticated with check (public.is_admin());
+create policy "ssetores_admin_update" on public.semana_setores for update to authenticated using (public.is_admin());
+create policy "ssetores_admin_delete" on public.semana_setores for delete to authenticated using (public.is_admin());
+do $$ begin alter publication supabase_realtime add table public.semana_setores; exception when duplicate_object then null; end $$;
+
+create table if not exists public.plano_semana (
+  id uuid primary key default gen_random_uuid(),
+  pedido_id uuid references public.pedidos(id) on delete cascade,
+  setor_id uuid references public.semana_setores(id) on delete set null,
+  dia date not null,
+  texto text not null default '',
+  feito boolean not null default false,
+  created_by uuid references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+create index if not exists plano_semana_dia_idx on public.plano_semana (dia);
+
+alter table public.plano_semana enable row level security;
+drop policy if exists "plano_select" on public.plano_semana;
+drop policy if exists "plano_admin_insert" on public.plano_semana;
+drop policy if exists "plano_update" on public.plano_semana;
+drop policy if exists "plano_admin_delete" on public.plano_semana;
+create policy "plano_select" on public.plano_semana for select to authenticated using (true);
+create policy "plano_admin_insert" on public.plano_semana for insert to authenticated with check (public.is_admin());
+create policy "plano_admin_update" on public.plano_semana for update to authenticated using (public.is_admin());
+create policy "plano_admin_delete" on public.plano_semana for delete to authenticated using (public.is_admin());
+
+-- marcar como feito: qualquer funcionário autenticado, SÓ o campo feito
+create or replace function public.marcar_feito_semana(p_id uuid, p_feito boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Não autenticado';
+  end if;
+  update public.plano_semana set feito = p_feito where id = p_id;
+  if not found then
+    raise exception 'Item não encontrado';
+  end if;
+end; $$;
+
+do $$ begin alter publication supabase_realtime add table public.plano_semana; exception when duplicate_object then null; end $$;
+
+-- ============================================================
 -- STORAGE: bucket de anexos
 -- ============================================================
 insert into storage.buckets (id, name, public)
