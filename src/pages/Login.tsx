@@ -18,7 +18,16 @@ export default function Login() {
     setEnviando(true)
     const msg = await signIn(email, senha)
     setEnviando(false)
-    if (msg) setErro(msg === 'Invalid login credentials' ? 'E-mail ou senha inválidos.' : msg)
+    if (msg) {
+      // o Supabase devolve "Email not confirmed" quando falta clicar no link
+      if (/not confirmed/i.test(msg)) {
+        setErro('E-mail ainda não confirmado. Peça ao administrador para liberar seu acesso.')
+      } else if (msg === 'Invalid login credentials') {
+        setErro('E-mail ou senha inválidos.')
+      } else {
+        setErro(msg)
+      }
+    }
   }
 
   return (

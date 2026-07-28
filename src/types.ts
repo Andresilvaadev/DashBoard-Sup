@@ -1,4 +1,9 @@
-export type Role = 'admin' | 'funcionario'
+/**
+ * admin       — acesso total (funcionários, fluxo, metas, sistema…)
+ * gestor      — "Administrativo": cria/edita pedidos (Pedidos, Criação, Canecas) e o Semanal
+ * funcionario — apenas move os pedidos de etapa
+ */
+export type Role = 'admin' | 'gestor' | 'funcionario'
 export type StatusPedido = 'em_andamento' | 'concluido' | 'cancelado' | 'arquivado'
 export type Prioridade = 'baixa' | 'normal' | 'alta' | 'urgente'
 /** aba do pedido: Pedidos (pronto), Criação de arte (criacao), Canecas (caneca) */
@@ -66,6 +71,8 @@ export interface Historico {
 export interface Anexo {
   id: string
   pedido_id: string
+  /** quando o anexo pertence a uma ficha técnica específica */
+  ficha_id?: string | null
   nome: string
   path: string
   tipo: string
@@ -73,6 +80,27 @@ export interface Anexo {
   uploaded_by: string | null
   created_at: string
   uploader?: Pick<Profile, 'id' | 'nome'>
+}
+
+/** Grade de tamanhos: { PP: 4, P: 12, M: 28 } — cada unidade = 1 par (frente+costa) */
+export type Grade = Record<string, number>
+
+/** Ficha técnica: uma por modelagem dentro do pedido */
+export interface FichaTecnica {
+  id: string
+  pedido_id: string
+  modelagem: string
+  tecido: string
+  gola: string
+  manga: string
+  punho: string
+  estampa: string
+  grade: Grade
+  observacoes: string
+  /** id do anexo marcado como Layout de Corte (só um por ficha) */
+  layout_anexo_id: string | null
+  created_at: string
+  pedido?: Pick<Pedido, 'id' | 'numero' | 'cliente' | 'created_at'>
 }
 
 export interface Meta {
@@ -118,6 +146,27 @@ export interface PlanoSemana {
   dia: string
   texto: string
   feito: boolean
+  created_by: string | null
+  created_at: string
+}
+
+/** Retrato do que foi cortado, guardado ao concluir o lote */
+export interface ResumoCorte {
+  pedidos: { numero: number; cliente: string }[]
+  modelagens: { modelagem: string; grade: Grade; total: number }[]
+  totalPares: number
+}
+
+/** Lote de corte: pedidos selecionados + progresso por tamanho */
+export interface LoteCorte {
+  id: string
+  pedido_ids: string[]
+  /** { "MANGA LONGA": { "M MASC": true } } */
+  progresso: Record<string, Record<string, boolean>>
+  /** preenchido ao concluir — base do relatório de cortes */
+  resumo?: ResumoCorte | Record<string, never>
+  finalizado_em: string | null
+  finalizado_por?: string | null
   created_by: string | null
   created_at: string
 }

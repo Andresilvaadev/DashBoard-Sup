@@ -23,7 +23,8 @@ const prioridadeBadge: Record<string, string> = {
 
 /** Mesma tela para as duas abas: Pedidos (arte pronta) e Pedidos para criação. */
 export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
-  const { isAdmin } = useAuth()
+  // admin OU administrativo criam/editam pedidos; funcionário só move de etapa
+  const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const toast = useToast()
   const { pedidos, recarregar } = usePedidos()
   const { etapas, etapasDoFluxo } = useEtapas()
@@ -155,7 +156,7 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
               ☰ Lista
             </button>
           </div>
-          {isAdmin && (
+          {podeGerenciar && (
             <button
               onClick={() => setModal('novo')}
               className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
@@ -191,8 +192,8 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
           etapas={etapasDaAba}
           ultrapassagens={ultrapassagens}
           fotos={fotos}
-          onEditar={isAdmin ? abrirEdicao : undefined}
-          onExcluir={isAdmin ? excluirClique : undefined}
+          onEditar={podeGerenciar ? abrirEdicao : undefined}
+          onExcluir={podeGerenciar ? excluirClique : undefined}
         />
       )}
 
@@ -268,7 +269,7 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
                 )}
               </div>
 
-              {isAdmin && (
+              {podeGerenciar && (
                 <div className="mt-3 flex gap-2 border-t border-slate-800 pt-3 text-xs">
                   <button onClick={() => setModal(p)} className="text-slate-400 hover:text-red-400">
                     Editar

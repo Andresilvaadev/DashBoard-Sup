@@ -7,7 +7,10 @@ interface AuthCtx {
   session: Session | null
   profile: Profile | null
   loading: boolean
+  /** acesso total (funcionários, fluxo, metas, sistema) */
   isAdmin: boolean
+  /** admin OU administrativo: cria/edita pedidos e mexe no Semanal */
+  podeGerenciarPedidos: boolean
   signIn: (email: string, senha: string) => Promise<string | null>
   signOut: () => Promise<void>
 }
@@ -17,6 +20,7 @@ const Ctx = createContext<AuthCtx>({
   profile: null,
   loading: true,
   isAdmin: false,
+  podeGerenciarPedidos: false,
   signIn: async () => null,
   signOut: async () => {},
 })
@@ -79,6 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         isAdmin: profile?.role === 'admin' && profile.ativo,
+        podeGerenciarPedidos:
+          Boolean(profile?.ativo) && (profile?.role === 'admin' || profile?.role === 'gestor'),
         signIn,
         signOut,
       }}

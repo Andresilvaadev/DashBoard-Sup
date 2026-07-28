@@ -2,7 +2,8 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   nome text not null default '',
   email text not null default '',
-  role text not null default 'funcionario' check (role in ('admin', 'funcionario')),
+  -- admin = tudo | gestor = "Administrativo" (pedidos + semanal) | funcionario = move etapas
+  role text not null default 'funcionario' check (role in ('admin', 'gestor', 'funcionario')),
   ativo boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -25,6 +26,16 @@ create trigger on_auth_user_created
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin' and ativo);
+$$;
+
+-- Helper: quem pode criar/editar pedidos e mexer no planejamento semanal
+-- (administrador OU administrativo/gestor)
+create or replace function public.pode_gerenciar_pedidos()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+     where id = auth.uid() and ativo and role in ('admin', 'gestor')
+  );
 $$;
 
 -- ---------- ETAPAS DO FLUXO (editável pelo admin) ----------
@@ -124,6 +135,68 @@ create table if not exists public.anexos (
   uploaded_by uuid references public.profiles(id),
   created_at timestamptz not null default now()
 );
+
+-- ---------- FICHAS TÉCNICAS (uma por modelagem do pedido) ----------
+create table if not exists public.fichas_tecnicas (
+  id uuid primary key default gen_random_uuid(),
+  pedido_id uuid not null references public.pedidos(id) on delete cascade,
+  modelagem text not null,
+  tecido text not null default '',
+  gola text not null default '',
+  manga text not null default '',
+  punho text not null default '',
+  estampa text not null default '',
+  -- grade de tamanhos: {"PP":4,"P":12,...} — cada unidade = 1 par
+  grade jsonb not null default '{}'::jsonb,
+  observacoes text not null default '',
+  layout_anexo_id uuid references public.anexos(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists fichas_pedido_idx on public.fichas_tecnicas (pedido_id);
+create index if not exists fichas_modelagem_idx on public.fichas_tecnicas (modelagem);
+
+alter table public.anexos
+  add column if not exists ficha_id uuid references public.fichas_tecnicas(id) on delete cascade;
+create index if not exists anexos_ficha_idx on public.anexos (ficha_id);
+
+alter table public.fichas_tecnicas enable row level security;
+drop policy if exists "fichas_select" on public.fichas_tecnicas;
+drop policy if exists "fichas_admin_insert" on public.fichas_tecnicas;
+drop policy if exists "fichas_admin_update" on public.fichas_tecnicas;
+drop policy if exists "fichas_admin_delete" on public.fichas_tecnicas;
+create policy "fichas_select" on public.fichas_tecnicas for select to authenticated using (true);
+create policy "fichas_admin_insert" on public.fichas_tecnicas for insert to authenticated with check (public.is_admin());
+create policy "fichas_admin_update" on public.fichas_tecnicas for update to authenticated using (public.is_admin());
+create policy "fichas_admin_delete" on public.fichas_tecnicas for delete to authenticated using (public.is_admin());
+
+do $$ begin alter publication supabase_realtime add table public.fichas_tecnicas; exception when duplicate_object then null; end $$;
+
+-- ---------- LOTES DE CORTE (Mapa de Corte persistente) ----------
+create table if not exists public.lotes_corte (
+  id uuid primary key default gen_random_uuid(),
+  pedido_ids uuid[] not null default '{}',
+  -- progresso: { "MANGA LONGA": { "M MASC": true } }
+  progresso jsonb not null default '{}'::jsonb,
+  -- retrato do que foi cortado (para o histórico não mudar depois)
+  resumo jsonb not null default '{}'::jsonb,
+  finalizado_em timestamptz,
+  finalizado_por uuid references public.profiles(id),
+  created_by uuid references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+create index if not exists lotes_corte_aberto_idx on public.lotes_corte (finalizado_em, created_at desc);
+
+alter table public.lotes_corte enable row level security;
+drop policy if exists "lote_select" on public.lotes_corte;
+drop policy if exists "lote_insert" on public.lotes_corte;
+drop policy if exists "lote_update" on public.lotes_corte;
+drop policy if exists "lote_admin_delete" on public.lotes_corte;
+create policy "lote_select" on public.lotes_corte for select to authenticated using (true);
+create policy "lote_insert" on public.lotes_corte for insert to authenticated with check (true);
+create policy "lote_update" on public.lotes_corte for update to authenticated using (true);
+create policy "lote_admin_delete" on public.lotes_corte for delete to authenticated using (public.is_admin());
+
+do $$ begin alter publication supabase_realtime add table public.lotes_corte; exception when duplicate_object then null; end $$;
 
 -- ---------- METAS DIÁRIAS ----------
 -- etapa_id = null → meta geral do dia (pedidos concluídos)
@@ -313,9 +386,9 @@ drop policy if exists "pedidos_admin_insert" on public.pedidos;
 drop policy if exists "pedidos_admin_update" on public.pedidos;
 drop policy if exists "pedidos_admin_delete" on public.pedidos;
 create policy "pedidos_select" on public.pedidos for select to authenticated using (true);
-create policy "pedidos_admin_insert" on public.pedidos for insert to authenticated with check (public.is_admin());
-create policy "pedidos_admin_update" on public.pedidos for update to authenticated using (public.is_admin());
-create policy "pedidos_admin_delete" on public.pedidos for delete to authenticated using (public.is_admin());
+create policy "pedidos_gestor_insert" on public.pedidos for insert to authenticated with check (public.pode_gerenciar_pedidos());
+create policy "pedidos_gestor_update" on public.pedidos for update to authenticated using (public.pode_gerenciar_pedidos());
+create policy "pedidos_gestor_delete" on public.pedidos for delete to authenticated using (public.pode_gerenciar_pedidos());
 
 -- historico: leitura para todos; NUNCA pode ser apagado ou alterado diretamente
 -- (inserções/fechamentos acontecem via funções security definer)
@@ -328,7 +401,7 @@ drop policy if exists "anexos_insert" on public.anexos;
 drop policy if exists "anexos_admin_delete" on public.anexos;
 create policy "anexos_select" on public.anexos for select to authenticated using (true);
 create policy "anexos_insert" on public.anexos for insert to authenticated with check (uploaded_by = auth.uid());
-create policy "anexos_admin_delete" on public.anexos for delete to authenticated using (public.is_admin());
+create policy "anexos_gestor_delete" on public.anexos for delete to authenticated using (public.pode_gerenciar_pedidos());
 
 -- metas: leitura para todos; escrita apenas admin
 drop policy if exists "metas_select" on public.metas;
@@ -506,9 +579,9 @@ drop policy if exists "ssetores_admin_insert" on public.semana_setores;
 drop policy if exists "ssetores_admin_update" on public.semana_setores;
 drop policy if exists "ssetores_admin_delete" on public.semana_setores;
 create policy "ssetores_select" on public.semana_setores for select to authenticated using (true);
-create policy "ssetores_admin_insert" on public.semana_setores for insert to authenticated with check (public.is_admin());
-create policy "ssetores_admin_update" on public.semana_setores for update to authenticated using (public.is_admin());
-create policy "ssetores_admin_delete" on public.semana_setores for delete to authenticated using (public.is_admin());
+create policy "ssetores_gestor_insert" on public.semana_setores for insert to authenticated with check (public.pode_gerenciar_pedidos());
+create policy "ssetores_gestor_update" on public.semana_setores for update to authenticated using (public.pode_gerenciar_pedidos());
+create policy "ssetores_gestor_delete" on public.semana_setores for delete to authenticated using (public.pode_gerenciar_pedidos());
 do $$ begin alter publication supabase_realtime add table public.semana_setores; exception when duplicate_object then null; end $$;
 
 create table if not exists public.plano_semana (
@@ -529,9 +602,9 @@ drop policy if exists "plano_admin_insert" on public.plano_semana;
 drop policy if exists "plano_update" on public.plano_semana;
 drop policy if exists "plano_admin_delete" on public.plano_semana;
 create policy "plano_select" on public.plano_semana for select to authenticated using (true);
-create policy "plano_admin_insert" on public.plano_semana for insert to authenticated with check (public.is_admin());
-create policy "plano_admin_update" on public.plano_semana for update to authenticated using (public.is_admin());
-create policy "plano_admin_delete" on public.plano_semana for delete to authenticated using (public.is_admin());
+create policy "plano_gestor_insert" on public.plano_semana for insert to authenticated with check (public.pode_gerenciar_pedidos());
+create policy "plano_gestor_update" on public.plano_semana for update to authenticated using (public.pode_gerenciar_pedidos());
+create policy "plano_gestor_delete" on public.plano_semana for delete to authenticated using (public.pode_gerenciar_pedidos());
 
 -- marcar como feito: qualquer funcionário autenticado, SÓ o campo feito
 create or replace function public.marcar_feito_semana(p_id uuid, p_feito boolean)

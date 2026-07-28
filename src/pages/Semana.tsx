@@ -31,7 +31,8 @@ const iso = (d: Date) =>
  * cartão mostra ao vivo em qual etapa está agora, com a foto do pedido.
  */
 export default function Semana() {
-  const { isAdmin } = useAuth()
+  // admin OU administrativo montam o planejamento; funcionário só consulta
+  const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const toast = useToast()
   const { pedidos } = usePedidos()
   const [params, setParams] = useSearchParams()
@@ -299,7 +300,7 @@ export default function Semana() {
         </div>
 
         {/* Canto superior direito: escolher/criar o setor e adicionar ao plano */}
-        {isAdmin && (
+        {podeGerenciar && (
           <div
             className="w-full rounded-xl border bg-slate-900/80 p-3 shadow-lg sm:w-auto sm:min-w-[20rem]"
             style={{ borderColor: setorEscolhido ? `${setorEscolhido.cor}66` : '#2a3670' }}
@@ -451,7 +452,7 @@ export default function Semana() {
       {grupos.length === 0 ? (
         <p className="py-16 text-center text-sm text-slate-500">
           {filtroSetor === 'todos'
-            ? `Nada planejado para esta semana${isAdmin ? ' — adicione acima.' : '.'}`
+            ? `Nada planejado para esta semana${podeGerenciar ? ' — adicione acima.' : '.'}`
             : 'Nada planejado para este setor nesta semana.'}
         </p>
       ) : (
@@ -546,7 +547,7 @@ export default function Semana() {
                             >
                               {it.feito ? '✓ Feito' : 'Marcar feito'}
                             </button>
-                            {isAdmin && (
+                            {podeGerenciar && (
                               <button onClick={() => void excluir(it)}
                                 className="shrink-0 text-xs text-slate-500 hover:text-rose-400" title="Remover do plano">
                                 ✕

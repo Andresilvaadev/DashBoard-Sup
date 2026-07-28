@@ -4,6 +4,27 @@ import { useToast } from '../../contexts/ToastContext'
 import { criarClienteSignup, supabase } from '../../lib/supabase'
 import type { Profile, Role } from '../../types'
 
+/** Nome exibido de cada papel */
+const ROTULO_ROLE: Record<Role, string> = {
+  admin: 'Administrador',
+  gestor: 'Administrativo',
+  funcionario: 'Funcionário',
+}
+
+/** Cor do selo de cada papel */
+const COR_ROLE: Record<Role, string> = {
+  admin: 'bg-violet-900 text-violet-300',
+  gestor: 'bg-sky-900 text-sky-300',
+  funcionario: 'bg-slate-800 text-slate-300',
+}
+
+/** O que cada papel pode fazer (mostrado na tela para orientar o admin) */
+const DESCRICAO_ROLE: Record<Role, string> = {
+  admin: 'Acesso total ao sistema.',
+  gestor: 'Cria e edita pedidos (Pedidos, Criação, Canecas) e monta o Semanal.',
+  funcionario: 'Acompanha e move os pedidos de etapa.',
+}
+
 export default function Funcionarios() {
   const toast = useToast()
   const { profile: eu } = useAuth()
@@ -14,6 +35,8 @@ export default function Funcionarios() {
   const [senha, setSenha] = useState('')
   const [role, setRole] = useState<Role>('funcionario')
   const [salvando, setSalvando] = useState(false)
+  /** true quando o Supabase exige confirmação de e-mail (bloqueia o 1º login) */
+  const [exigeConfirmacao, setExigeConfirmacao] = useState(false)
 
   const carregar = async () => {
     const { data } = await supabase.from('profiles').select('*').order('nome')
@@ -37,16 +60,27 @@ export default function Funcionarios() {
       toast(error?.message ?? 'Falha ao criar usuário.', 'erro')
       return
     }
-    if (role === 'admin') {
-      await supabase.from('profiles').update({ role: 'admin' }).eq('id', data.user.id)
+    if (role !== 'funcionario') {
+      await supabase.from('profiles').update({ role }).eq('id', data.user.id)
     }
+
+    // Sem sessão de volta = o projeto exige confirmação de e-mail, e a pessoa
+    // não consegue entrar antes de clicar no link. Avisa o admin como resolver.
+    const precisaConfirmar = !data.session
+    setExigeConfirmacao(precisaConfirmar)
+
     setSalvando(false)
     setModalNovo(false)
     setNome('')
     setEmail('')
     setSenha('')
     setRole('funcionario')
-    toast(`Funcionário ${nome} cadastrado.`, 'sucesso')
+    toast(
+      precisaConfirmar
+        ? `${nome} cadastrado, mas precisa confirmar o e-mail para entrar.`
+        : `Funcionário ${nome} cadastrado.`,
+      precisaConfirmar ? 'info' : 'sucesso',
+    )
     carregar()
   }
 
@@ -56,12 +90,13 @@ export default function Funcionarios() {
     else carregar()
   }
 
-  const alternarRole = async (p: Profile) => {
-    const novo = p.role === 'admin' ? 'funcionario' : 'admin'
+  /** Define o papel do usuário (admin / administrativo / funcionário) */
+  const definirRole = async (p: Profile, novo: Role) => {
+    if (p.role === novo) return
     const { error } = await supabase.from('profiles').update({ role: novo }).eq('id', p.id)
     if (error) toast(error.message, 'erro')
     else {
-      toast(`${p.nome} agora é ${novo === 'admin' ? 'administrador' : 'funcionário'}.`, 'sucesso')
+      toast(`${p.nome} agora é ${ROTULO_ROLE[novo].toLowerCase()}.`, 'sucesso')
       carregar()
     }
   }
@@ -79,6 +114,42 @@ export default function Funcionarios() {
           + Cadastrar funcionário
         </button>
       </div>
+
+      {/* O projeto exige confirmação de e-mail: explica como liberar o acesso */}
+      {exigeConfirmacao && (
+        <div className="rounded-xl border border-amber-800 bg-amber-950/40 p-4 text-sm">
+          <div className="flex items-start justify-between gap-3">
+            <p className="font-semibold text-amber-300">
+              ⚠️ Este projeto exige confirmação de e-mail
+            </p>
+            <button
+              onClick={() => setExigeConfirmacao(false)}
+              className="shrink-0 text-xs text-amber-500 hover:text-amber-300"
+            >
+              Fechar ✕
+            </button>
+          </div>
+          <p className="mt-2 text-amber-200/80">
+            Quem for cadastrado só consegue entrar depois de clicar no link enviado por e-mail. Para
+            uso interno, desligue essa exigência uma única vez no painel do Supabase:
+          </p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-amber-200/80">
+            <li>
+              Painel do Supabase → <strong>Authentication</strong> → <strong>Sign In / Providers</strong>{' '}
+              → <strong>Email</strong>
+            </li>
+            <li>
+              Desmarque <strong>&quot;Confirm email&quot;</strong> e salve
+            </li>
+            <li>
+              Para liberar quem já foi cadastrado, rode no <strong>SQL Editor</strong>:
+              <code className="mt-1 block rounded bg-slate-950 px-2 py-1.5 text-xs text-amber-300">
+                update auth.users set email_confirmed_at = now() where email_confirmed_at is null;
+              </code>
+            </li>
+          </ol>
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
         <table className="w-full text-sm">
@@ -100,12 +171,8 @@ export default function Funcionarios() {
                 </td>
                 <td className="p-3 text-slate-400">{p.email}</td>
                 <td className="p-3">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      p.role === 'admin' ? 'bg-violet-900 text-violet-300' : 'bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    {p.role === 'admin' ? 'Admin' : 'Funcionário'}
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${COR_ROLE[p.role]}`}>
+                    {ROTULO_ROLE[p.role]}
                   </span>
                 </td>
                 <td className="p-3">
@@ -115,10 +182,32 @@ export default function Funcionarios() {
                 </td>
                 <td className="p-3">
                   {p.id !== eu?.id && (
-                    <div className="flex gap-3 text-xs">
-                      <button onClick={() => void alternarRole(p)} className="text-slate-400 hover:text-violet-400">
-                        {p.role === 'admin' ? 'Tornar funcionário' : 'Tornar admin'}
-                      </button>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                      {p.role !== 'admin' && (
+                        <button
+                          onClick={() => void definirRole(p, 'admin')}
+                          className="text-slate-400 hover:text-violet-400"
+                        >
+                          Tornar admin
+                        </button>
+                      )}
+                      {p.role !== 'gestor' && (
+                        <button
+                          onClick={() => void definirRole(p, 'gestor')}
+                          title={DESCRICAO_ROLE.gestor}
+                          className="text-slate-400 hover:text-sky-400"
+                        >
+                          Tornar administrativo
+                        </button>
+                      )}
+                      {p.role !== 'funcionario' && (
+                        <button
+                          onClick={() => void definirRole(p, 'funcionario')}
+                          className="text-slate-400 hover:text-slate-200"
+                        >
+                          Tornar funcionário
+                        </button>
+                      )}
                       <button onClick={() => void alternarAtivo(p)} className="text-slate-400 hover:text-rose-400">
                         {p.ativo ? 'Desativar' : 'Reativar'}
                       </button>
@@ -168,8 +257,10 @@ export default function Funcionarios() {
                 <label className="text-xs font-medium text-slate-400">Função</label>
                 <select value={role} onChange={(e) => setRole(e.target.value as Role)} className={inputCls}>
                   <option value="funcionario">Funcionário</option>
+                  <option value="gestor">Administrativo</option>
                   <option value="admin">Administrador</option>
                 </select>
+                <p className="mt-1 text-xs text-slate-500">{DESCRICAO_ROLE[role]}</p>
               </div>
             </div>
             <div className="mt-5 flex gap-3">

@@ -17,6 +17,7 @@ const Capacidade = lazy(() => import('./pages/Capacidade'))
 const Perdas = lazy(() => import('./pages/Perdas'))
 const Relatorios = lazy(() => import('./pages/Relatorios'))
 const Semana = lazy(() => import('./pages/Semana'))
+const MapaCorte = lazy(() => import('./pages/MapaCorte'))
 const Admin = lazy(() => import('./pages/admin/Admin'))
 const Fluxo = lazy(() => import('./pages/admin/Fluxo'))
 const Funcionarios = lazy(() => import('./pages/admin/Funcionarios'))
@@ -53,6 +54,7 @@ export default function App() {
                 <Route path="/canecas" element={<Pedidos tipo="caneca" />} />
                 <Route path="/pedidos/:numero" element={<PedidoDetalhe />} />
                 <Route path="/semana" element={<Semana />} />
+                <Route path="/mapa-corte" element={<MapaCorte />} />
                 <Route path="/arquivo" element={<Arquivo />} />
                 <Route path="/estoque" element={<Estoque />} />
                 <Route path="/capacidade" element={<Capacidade />} />

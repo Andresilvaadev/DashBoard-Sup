@@ -29,6 +29,13 @@ const icones = {
       <path d="M4 5h11v11a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3zM15 8h3a2 2 0 0 1 0 4h-3" />
     </svg>
   ),
+  mapaCorte: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12" />
+    </svg>
+  ),
   semana: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={iconCls}>
       <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -79,6 +86,7 @@ export default function Layout() {
     { to: '/criacao', label: 'Criação', icone: icones.criacao },
     { to: '/canecas', label: 'Canecas', icone: icones.canecas },
     { to: '/semana', label: 'Semana', icone: icones.semana },
+    { to: '/mapa-corte', label: 'Corte', icone: icones.mapaCorte },
     { to: '/arquivo', label: 'Arquivo', icone: icones.arquivo },
     { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
     { to: '/capacidade', label: 'Capacidade', icone: icones.capacidade },
@@ -113,7 +121,13 @@ export default function Layout() {
         </nav>
         <div className="border-t border-slate-800 pt-3">
           <p className="truncate px-2 text-sm font-medium">{profile?.nome}</p>
-          <p className="px-2 text-xs text-slate-500">{isAdmin ? 'Administrador' : 'Funcionário'}</p>
+          <p className="px-2 text-xs text-slate-500">
+            {profile?.role === 'admin'
+              ? 'Administrador'
+              : profile?.role === 'gestor'
+                ? 'Administrativo'
+                : 'Funcionário'}
+          </p>
           <button
             onClick={() => void signOut()}
             className="mt-2 w-full rounded-lg px-2 py-2 text-left text-sm text-rose-400 hover:bg-slate-800"

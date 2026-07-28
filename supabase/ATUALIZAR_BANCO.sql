@@ -484,6 +484,65 @@ alter table public.plano_semana
 do $$ begin alter publication supabase_realtime add table public.semana_setores; exception when duplicate_object then null; end $$;
 
 -- ------------------------------------------------------------
+-- 10. FICHAS TÉCNICAS + LAYOUT DE CORTE (Mapa de Corte)
+-- ------------------------------------------------------------
+create table if not exists public.fichas_tecnicas (
+  id uuid primary key default gen_random_uuid(),
+  pedido_id uuid not null references public.pedidos(id) on delete cascade,
+  modelagem text not null,
+  tecido text not null default '',
+  gola text not null default '',
+  manga text not null default '',
+  punho text not null default '',
+  estampa text not null default '',
+  grade jsonb not null default '{}'::jsonb,
+  observacoes text not null default '',
+  layout_anexo_id uuid references public.anexos(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists fichas_pedido_idx on public.fichas_tecnicas (pedido_id);
+create index if not exists fichas_modelagem_idx on public.fichas_tecnicas (modelagem);
+alter table public.anexos
+  add column if not exists ficha_id uuid references public.fichas_tecnicas(id) on delete cascade;
+create index if not exists anexos_ficha_idx on public.anexos (ficha_id);
+alter table public.fichas_tecnicas enable row level security;
+drop policy if exists "fichas_select" on public.fichas_tecnicas;
+drop policy if exists "fichas_admin_insert" on public.fichas_tecnicas;
+drop policy if exists "fichas_admin_update" on public.fichas_tecnicas;
+drop policy if exists "fichas_admin_delete" on public.fichas_tecnicas;
+create policy "fichas_select" on public.fichas_tecnicas for select to authenticated using (true);
+create policy "fichas_admin_insert" on public.fichas_tecnicas for insert to authenticated with check (public.is_admin());
+create policy "fichas_admin_update" on public.fichas_tecnicas for update to authenticated using (public.is_admin());
+create policy "fichas_admin_delete" on public.fichas_tecnicas for delete to authenticated using (public.is_admin());
+do $$ begin alter publication supabase_realtime add table public.fichas_tecnicas; exception when duplicate_object then null; end $$;
+
+-- ------------------------------------------------------------
+-- 11. LOTES DE CORTE (Mapa de Corte persistente)
+-- ------------------------------------------------------------
+create table if not exists public.lotes_corte (
+  id uuid primary key default gen_random_uuid(),
+  pedido_ids uuid[] not null default '{}',
+  progresso jsonb not null default '{}'::jsonb,
+  finalizado_em timestamptz,
+  created_by uuid references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+create index if not exists lotes_corte_aberto_idx on public.lotes_corte (finalizado_em, created_at desc);
+alter table public.lotes_corte enable row level security;
+drop policy if exists "lote_select" on public.lotes_corte;
+drop policy if exists "lote_insert" on public.lotes_corte;
+drop policy if exists "lote_update" on public.lotes_corte;
+drop policy if exists "lote_admin_delete" on public.lotes_corte;
+create policy "lote_select" on public.lotes_corte for select to authenticated using (true);
+create policy "lote_insert" on public.lotes_corte for insert to authenticated with check (true);
+create policy "lote_update" on public.lotes_corte for update to authenticated using (true);
+create policy "lote_admin_delete" on public.lotes_corte for delete to authenticated using (public.is_admin());
+do $$ begin alter publication supabase_realtime add table public.lotes_corte; exception when duplicate_object then null; end $$;
+-- resumo do corte (histórico) + quem concluiu
+alter table public.lotes_corte add column if not exists resumo jsonb not null default '{}'::jsonb;
+alter table public.lotes_corte add column if not exists finalizado_por uuid references public.profiles(id);
+
+-- ------------------------------------------------------------
 -- Recarrega o cache de schema da API (resolve o erro
 -- "Could not find the function ... in the schema cache")
 -- ------------------------------------------------------------

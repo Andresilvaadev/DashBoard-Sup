@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import FichasTecnicas from '../components/FichasTecnicas'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useEtapas } from '../hooks/useEtapas'
@@ -17,7 +18,8 @@ export default function PedidoDetalhe() {
   const { numero } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
-  const { isAdmin } = useAuth()
+  // admin OU administrativo gerenciam o pedido (status, aba, exclusão)
+  const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const { etapas, etapasDoFluxo } = useEtapas()
   const { pedidos: todosPedidos } = usePedidos()
   const [pedido, setPedido] = useState<Pedido | null>(null)
@@ -304,7 +306,7 @@ export default function PedidoDetalhe() {
         {pedido.descricao && <p className="mt-1 text-sm text-slate-500">{pedido.descricao}</p>}
 
         {/* Ações de admin: arquivar / cancelar / reativar / excluir */}
-        {isAdmin && (
+        {podeGerenciar && (
           <div className="mt-3 flex flex-wrap gap-2">
             {pedido.status === 'em_andamento' && (
               <>
@@ -411,7 +413,7 @@ export default function PedidoDetalhe() {
         </div>
 
         {/* Mover para outra aba (muda o fluxo e reinicia na 1ª etapa do destino) */}
-        {isAdmin && (
+        {podeGerenciar && (
           <div className="mt-4 border-t border-slate-800 pt-3">
             <p className="mb-2 text-xs font-medium text-slate-400">Mover para outra aba</p>
             <div className="flex flex-wrap gap-2">
@@ -430,6 +432,9 @@ export default function PedidoDetalhe() {
         )}
       </div>
       )}
+
+      {/* Fichas técnicas (uma por modelagem) — base do Mapa de Corte */}
+      <FichasTecnicas pedidoId={pedido.id} numeroPedido={pedido.numero} />
 
       {/* Tempo somado em cada etapa */}
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
