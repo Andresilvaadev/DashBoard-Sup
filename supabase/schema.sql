@@ -636,7 +636,7 @@ create policy "anexos_storage_read" on storage.objects
 create policy "anexos_storage_upload" on storage.objects
   for insert to authenticated with check (bucket_id = 'anexos');
 create policy "anexos_storage_delete_admin" on storage.objects
-  for delete to authenticated using (bucket_id = 'anexos' and public.is_admin());
+  for delete to authenticated using (bucket_id = 'anexos' and public.pode_gerenciar_pedidos());
 
 -- ============================================================
 -- IMPORTANTE: após criar seu primeiro usuário (via tela de login

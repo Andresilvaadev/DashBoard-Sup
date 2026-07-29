@@ -28,6 +28,8 @@ export default function PedidoDetalhe() {
   const [carregando, setCarregando] = useState(true)
   const [movendo, setMovendo] = useState(false)
   const [enviandoArquivo, setEnviandoArquivo] = useState(false)
+  /** id do anexo sendo apagado no momento */
+  const [apagandoAnexo, setApagandoAnexo] = useState<string | null>(null)
   // URLs assinadas para exibir as fotos direto na lista (bucket é privado)
   const [urlsImagens, setUrlsImagens] = useState<Record<string, string>>({})
   const [imagemAberta, setImagemAberta] = useState<{ url: string; nome: string } | null>(null)
@@ -207,13 +209,27 @@ export default function PedidoDetalhe() {
     navigate('/pedidos')
   }
 
-  const baixarAnexo = async (a: Anexo) => {
-    const url = await urlAnexo(a.path)
-    if (!url) {
-      toast('Não foi possível abrir o arquivo.', 'erro')
+  /** Apaga um anexo: remove o registro e o arquivo do Storage. */
+  const excluirAnexo = async (a: Anexo) => {
+    if (!confirm(`Apagar "${a.nome}"? Esta ação não pode ser desfeita.`)) return
+    setApagandoAnexo(a.id)
+    const { error } = await supabase.from('anexos').delete().eq('id', a.id)
+    if (error) {
+      setApagandoAnexo(null)
+      toast(
+        error.message.includes('row-level security')
+          ? 'Você não tem permissão para apagar anexos.'
+          : error.message,
+        'erro',
+      )
       return
     }
-    window.open(url, '_blank')
+    await removerAnexosStorage([a.path])
+    setApagandoAnexo(null)
+    // se a foto apagada estava aberta em tela cheia, fecha o visualizador
+    setImagemAberta((atual) => (atual?.url === urlsImagens[a.path] ? null : atual))
+    toast(`"${a.nome}" apagado.`, 'sucesso')
+    carregar()
   }
 
   if (carregando) {
@@ -547,22 +563,39 @@ export default function PedidoDetalhe() {
                   {anexos
                     .filter((a) => urlsImagens[a.path])
                     .map((a) => (
-                      <button
+                      <div
                         key={a.id}
-                        onClick={() => setImagemAberta({ url: urlsImagens[a.path], nome: a.nome })}
-                        title={a.nome}
-                        className="group relative overflow-hidden rounded-lg border border-slate-800 hover:border-red-500"
+                        className={`group relative overflow-hidden rounded-lg border border-slate-800 hover:border-red-500 ${
+                          apagandoAnexo === a.id ? 'opacity-40' : ''
+                        }`}
                       >
-                        <img
-                          src={urlsImagens[a.path]}
-                          alt={a.nome}
-                          loading="lazy"
-                          className="h-28 w-full object-cover transition-transform group-hover:scale-105"
-                        />
-                        <span className="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-2 py-1 text-left text-[10px] text-slate-300">
-                          {a.nome}
-                        </span>
-                      </button>
+                        <button
+                          onClick={() => setImagemAberta({ url: urlsImagens[a.path], nome: a.nome })}
+                          title={a.nome}
+                          className="block w-full"
+                        >
+                          <img
+                            src={urlsImagens[a.path]}
+                            alt={a.nome}
+                            loading="lazy"
+                            className="h-28 w-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <span className="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-2 py-1 text-left text-[10px] text-slate-300">
+                            {a.nome}
+                          </span>
+                        </button>
+                        {podeGerenciar && (
+                          <button
+                            onClick={() => void excluirAnexo(a)}
+                            disabled={apagandoAnexo === a.id}
+                            title="Apagar foto"
+                            /* no celular não existe hover: fica sempre visível */
+                            className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950/80 text-xs text-slate-300 transition-opacity hover:bg-rose-600 hover:text-white md:opacity-0 md:focus:opacity-100 md:group-hover:opacity-100"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     ))}
                 </div>
               )}
@@ -572,10 +605,18 @@ export default function PedidoDetalhe() {
                 {anexos
                   .filter((a) => !urlsImagens[a.path])
                   .map((a) => (
-                    <li key={a.id}>
-                      <button
-                        onClick={() => void baixarAnexo(a)}
-                        className="flex w-full items-center gap-3 rounded-lg border border-slate-800 p-2.5 text-left hover:border-slate-600"
+                    <li
+                      key={a.id}
+                      className={`flex items-center gap-2 rounded-lg border border-slate-800 pr-2 hover:border-slate-600 ${
+                        apagandoAnexo === a.id ? 'opacity-40' : ''
+                      }`}
+                    >
+                      {/* abre o visualizador em aba própria (link normal: sem bloqueio de pop-up) */}
+                      <a
+                        href={`/anexo/${a.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex min-w-0 flex-1 items-center gap-3 p-2.5 text-left"
                       >
                         <span className="rounded border border-slate-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                           {a.tipo.startsWith('image/') ? 'Img' : a.tipo.includes('pdf') ? 'PDF' : 'Arq'}
@@ -587,7 +628,17 @@ export default function PedidoDetalhe() {
                             {formatarDataHora(a.created_at)}
                           </span>
                         </span>
-                      </button>
+                      </a>
+                      {podeGerenciar && (
+                        <button
+                          onClick={() => void excluirAnexo(a)}
+                          disabled={apagandoAnexo === a.id}
+                          title="Apagar arquivo"
+                          className="shrink-0 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-800 hover:text-rose-400 disabled:opacity-40"
+                        >
+                          🗑
+                        </button>
+                      )}
                     </li>
                   ))}
               </ul>

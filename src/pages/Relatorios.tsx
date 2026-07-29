@@ -37,7 +37,8 @@ function inicioDoPeriodo(p: Periodo): Date {
 }
 
 export default function Relatorios() {
-  const { etapasAtivas, etapasCriacao } = useEtapas()
+  const { etapasAtivas, etapasCriacao, etapasDoFluxo } = useEtapas()
+  const etapasCaneca = etapasDoFluxo('caneca')
   const { capacidadeDiaria } = useConfig()
   const [periodo, setPeriodo] = useState<Periodo>('semana')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -157,6 +158,36 @@ export default function Relatorios() {
       : null
     const totalCriacoes = tempoCriacaoPorPedido.size
 
+    // ---- FLUXO DE CANECAS (aba Canecas) ----
+    const idsCaneca = new Set(etapasCaneca.map((e) => e.id))
+    const ultimaOrdemCaneca = Math.max(0, ...etapasCaneca.map((e) => e.ordem))
+    const porEtapaCaneca = etapasCaneca.map((e) => {
+      const fonte = e.ordem >= ultimaOrdemCaneca ? historico : fechados
+      const regs = fonte.filter((h) => h.etapa_id === e.id)
+      const pedidosUnicos = new Set(regs.map((r) => r.pedido_id))
+      const tempos = regs.map((r) => r.segundos_gastos ?? 0).filter((t) => t > 0)
+      return {
+        nome: e.nome,
+        cor: e.cor,
+        qtd: pedidosUnicos.size,
+        tempoMedio: tempos.length ? tempos.reduce((a, b) => a + b, 0) / tempos.length : null,
+      }
+    })
+
+    const tempoCanecaPorPedido = new Map<string, number>()
+    for (const h of fechados) {
+      if (!idsCaneca.has(h.etapa_id)) continue
+      tempoCanecaPorPedido.set(
+        h.pedido_id,
+        (tempoCanecaPorPedido.get(h.pedido_id) ?? 0) + (h.segundos_gastos ?? 0),
+      )
+    }
+    const temposCaneca = [...tempoCanecaPorPedido.values()].filter((t) => t > 0)
+    const tempoMedioCaneca = temposCaneca.length
+      ? temposCaneca.reduce((a, b) => a + b, 0) / temposCaneca.length
+      : null
+    const totalCanecas = tempoCanecaPorPedido.size
+
     // funcionário mais produtivo: pedido+etapa únicos (repetir a mesma etapa
     // do mesmo pedido não conta em dobro)
     const porFunc = new Map<string, Set<string>>()
@@ -251,6 +282,9 @@ export default function Relatorios() {
       porEtapaCriacao,
       tempoMedioCriacao,
       totalCriacoes,
+      porEtapaCaneca,
+      tempoMedioCaneca,
+      totalCanecas,
       rankFunc,
       setorTop,
       tempoMedioProducao,
@@ -259,7 +293,7 @@ export default function Relatorios() {
       totalMeta,
       evolucao,
     }
-  }, [pedidos, historico, metas, perdas, etapasAtivas, etapasCriacao, capacidadeDiaria, periodo])
+  }, [pedidos, historico, metas, perdas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo])
 
   const labelPeriodo = PERIODOS.find((p) => p.id === periodo)!.label
 
@@ -311,6 +345,18 @@ export default function Relatorios() {
             linhas: [
               ...rel.porEtapaCriacao.map((e) => [e.nome, e.qtd, formatarDuracao(e.tempoMedio)]),
               ['Tempo médio total de criação', rel.totalCriacoes, formatarDuracao(rel.tempoMedioCriacao)],
+            ],
+          } as TabelaExport,
+        ]
+      : []),
+    ...(rel.porEtapaCaneca.length > 0
+      ? [
+          {
+            titulo: 'Canecas — tempo por etapa',
+            colunas: ['Etapa', 'Pedidos', 'Tempo médio'],
+            linhas: [
+              ...rel.porEtapaCaneca.map((e) => [e.nome, e.qtd, formatarDuracao(e.tempoMedio)]),
+              ['Tempo médio total de canecas', rel.totalCanecas, formatarDuracao(rel.tempoMedioCaneca)],
             ],
           } as TabelaExport,
         ]
@@ -580,25 +626,29 @@ export default function Relatorios() {
             {/* Produção por etapa */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
               <h2 className="mb-3 text-sm font-semibold">Produção por etapa</h2>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rel.porEtapa} layout="vertical" margin={{ top: 0, right: 10, bottom: 0, left: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
-                    <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
-                    <YAxis type="category" dataKey="nome" width={90} tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                    <Tooltip
-                      contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
-                      labelStyle={{ color: '#e2e8f0' }}
-                      cursor={{ fill: '#1a2455' }}
-                    />
-                    <Bar dataKey="qtd" name="Realizadas" radius={[0, 6, 6, 0]}>
-                      {rel.porEtapa.map((e, i) => (
-                        <Cell key={i} fill={e.cor} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              {rel.porEtapa.length === 0 ? (
+                <p className="py-16 text-center text-sm text-slate-500">Nenhuma etapa de produção encontrada.</p>
+              ) : (
+                <div style={{ height: Math.max(220, rel.porEtapa.length * 44) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={rel.porEtapa} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
+                      <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
+                      <YAxis type="category" dataKey="nome" width={120} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                      <Tooltip
+                        contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
+                        labelStyle={{ color: '#e2e8f0' }}
+                        cursor={{ fill: '#1a2455' }}
+                      />
+                      <Bar dataKey="qtd" name="Realizadas" radius={[0, 6, 6, 0]}>
+                        {rel.porEtapa.map((e, i) => (
+                          <Cell key={i} fill={e.cor} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
 
             {/* Tempo médio por etapa */}
@@ -661,6 +711,43 @@ export default function Relatorios() {
                 </thead>
                 <tbody>
                   {rel.porEtapaCriacao.map((e) => (
+                    <tr key={e.nome} className="border-b border-slate-800/50">
+                      <td className="py-2">
+                        <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
+                        {e.nome}
+                      </td>
+                      <td className="py-2 text-right font-medium">{e.qtd}</td>
+                      <td className="py-2 text-right text-slate-400">{formatarDuracao(e.tempoMedio)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Canecas — tempo por etapa */}
+          {rel.porEtapaCaneca.length > 0 && (
+            <div className="rounded-xl border border-cyan-900/60 bg-slate-900 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-cyan-300">◆ Canecas</h2>
+                <span className="text-xs text-slate-400">
+                  Tempo médio de produção:{' '}
+                  <span className="font-semibold text-slate-200">
+                    {formatarDuracao(rel.tempoMedioCaneca)}
+                  </span>
+                  {rel.totalCanecas > 0 && ` • ${rel.totalCanecas} caneca(s)`}
+                </span>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
+                    <th className="pb-2 font-medium">Etapa</th>
+                    <th className="pb-2 text-right font-medium">Pedidos</th>
+                    <th className="pb-2 text-right font-medium">Tempo médio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rel.porEtapaCaneca.map((e) => (
                     <tr key={e.nome} className="border-b border-slate-800/50">
                       <td className="py-2">
                         <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />

@@ -50,6 +50,11 @@ drop policy if exists "anexos_admin_delete" on public.anexos;
 create policy "anexos_gestor_delete" on public.anexos
   for delete to authenticated using (public.pode_gerenciar_pedidos());
 
+-- e apagar o arquivo em si do bucket de anexos
+drop policy if exists "anexos_storage_delete_admin" on storage.objects;
+create policy "anexos_storage_delete_admin" on storage.objects
+  for delete to authenticated using (bucket_id = 'anexos' and public.pode_gerenciar_pedidos());
+
 -- ------------------------------------------------------------
 -- 4. Funções de pedido passam a aceitar o administrativo
 -- ------------------------------------------------------------

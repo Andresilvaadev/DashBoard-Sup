@@ -3,7 +3,6 @@ import { NavLink, Outlet } from 'react-router-dom'
 const abas = [
   { to: '/admin', label: 'Funcionários', end: true },
   { to: '/admin/fluxo', label: 'Fluxo de produção' },
-  { to: '/admin/metas', label: 'Metas diárias' },
   { to: '/admin/sistema', label: 'Sistema' },
 ]
 

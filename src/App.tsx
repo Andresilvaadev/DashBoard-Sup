@@ -18,10 +18,10 @@ const Perdas = lazy(() => import('./pages/Perdas'))
 const Relatorios = lazy(() => import('./pages/Relatorios'))
 const Semana = lazy(() => import('./pages/Semana'))
 const MapaCorte = lazy(() => import('./pages/MapaCorte'))
+const VisualizarAnexo = lazy(() => import('./pages/VisualizarAnexo'))
 const Admin = lazy(() => import('./pages/admin/Admin'))
 const Fluxo = lazy(() => import('./pages/admin/Fluxo'))
 const Funcionarios = lazy(() => import('./pages/admin/Funcionarios'))
-const Metas = lazy(() => import('./pages/admin/Metas'))
 const Sistema = lazy(() => import('./pages/admin/Sistema'))
 
 /** Spinner exibido enquanto o chunk da página é baixado (mesmo padrão visual do app). */
@@ -41,6 +41,15 @@ export default function App() {
           <Suspense fallback={<CarregandoPagina />}>
             <Routes>
               <Route path="/login" element={<Login />} />
+              {/* Visualizador de anexo em aba própria (sem o menu do app) */}
+              <Route
+                path="/anexo/:id"
+                element={
+                  <Protected>
+                    <VisualizarAnexo />
+                  </Protected>
+                }
+              />
               <Route
                 element={
                   <Protected>
@@ -70,7 +79,6 @@ export default function App() {
                 >
                   <Route index element={<Funcionarios />} />
                   <Route path="fluxo" element={<Fluxo />} />
-                  <Route path="metas" element={<Metas />} />
                   <Route path="sistema" element={<Sistema />} />
                 </Route>
               </Route>

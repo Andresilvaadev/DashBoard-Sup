@@ -20,7 +20,9 @@ export default function PedidoFormModal({
 }) {
   const toast = useToast()
   const editando = Boolean(pedido)
-  const [numero, setNumero] = useState(pedido?.numero?.toString() ?? '')
+  const [numero, setNumero] = useState(() =>
+    pedido ? pedido.numero.toString() : String(Math.floor(10000 + Math.random() * 90000)),
+  )
   const [cliente, setCliente] = useState(pedido?.cliente ?? '')
   const [descricao, setDescricao] = useState(pedido?.descricao ?? '')
   const [quantidade, setQuantidade] = useState(pedido?.quantidade?.toString() ?? '1')
@@ -174,15 +176,23 @@ export default function PedidoFormModal({
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-slate-400">Número *</label>
-            <input
-              type="number"
-              required
-              min={1}
-              value={numero}
-              onChange={(e) => setNumero(e.target.value)}
-              className={inputCls}
-            />
+            <label className="text-xs font-medium text-slate-400">
+              Nº OS{editando ? ' *' : ''}
+            </label>
+            {editando ? (
+              <input
+                type="number"
+                required
+                min={1}
+                value={numero}
+                onChange={(e) => setNumero(e.target.value)}
+                className={inputCls}
+              />
+            ) : (
+              <div className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-300">
+                {numero}
+              </div>
+            )}
           </div>
           <div>
             <label className="text-xs font-medium text-slate-400">Quantidade</label>
