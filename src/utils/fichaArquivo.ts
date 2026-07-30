@@ -65,6 +65,57 @@ const ehInfantil = (t: string) => /AN|C$/i.test(t.trim())
 
 const somaGrade = (g: Grade) => Object.values(g).reduce((a, b) => a + b, 0)
 
+/** Uma grade encontrada no arquivo, antes de virar modelagem */
+interface GradeLida {
+  titulo: string
+  grade: Grade
+}
+
+/**
+ * Junta as grades lidas em modelagens (grades da MESMA modelagem são somadas —
+ * é comum a ficha ter uma tabela INFANTIL e outra ADULTO da mesma camisa) e
+ * gera os avisos de conferência contra os totais declarados na ficha.
+ */
+function montarModelagens(
+  ficha: FichaLida,
+  lidas: GradeLida[],
+  totaisDeclarados: Map<string, number>,
+  totalGeralDeclarado: number | null,
+) {
+  for (const { titulo, grade } of lidas) {
+    if (Object.keys(grade).length === 0) continue
+    const nome = nomeModelagem(titulo, ficha.manga)
+    const existente = ficha.modelagens.find((m) => m.modelagem === nome)
+    if (existente) {
+      for (const [tam, qtd] of Object.entries(grade)) {
+        existente.grade[tam] = (existente.grade[tam] ?? 0) + qtd
+      }
+    } else {
+      const declarado =
+        totaisDeclarados.get(nome.toUpperCase()) ?? totaisDeclarados.get(titulo.toUpperCase())
+      ficha.modelagens.push({ modelagem: nome, grade: { ...grade }, total: 0, totalDeclarado: declarado })
+    }
+  }
+
+  for (const m of ficha.modelagens) {
+    m.total = somaGrade(m.grade)
+    if (m.totalDeclarado != null && m.totalDeclarado !== m.total) {
+      ficha.avisos.push(
+        `"${m.modelagem}": a ficha declara ${m.totalDeclarado} peças, mas a tabela soma ${m.total}. Confira a grade.`,
+      )
+    }
+  }
+
+  ficha.total = ficha.modelagens.reduce((a, m) => a + m.total, 0)
+
+  // conferência final: o TOTAL do cabeçalho tem que bater com tudo que foi lido
+  if (totalGeralDeclarado != null && totalGeralDeclarado !== ficha.total) {
+    ficha.avisos.push(
+      `A ficha declara TOTAL de ${totalGeralDeclarado} peças, mas a leitura somou ${ficha.total}. Confira se alguma tabela de tamanhos ficou de fora.`,
+    )
+  }
+}
+
 /** nome final da modelagem: usa o título da grade, ou o modelo da manga */
 function nomeModelagem(titulo: string, manga: string): string {
   const t = titulo.trim()
@@ -144,6 +195,7 @@ function interpretarDocx(tabelas: string[][][], paragrafos: string[]): FichaLida
     estampa: '', observacoes: '', modelagens: [], total: 0, avisos,
   }
   const totaisDeclarados = new Map<string, number>()
+  let totalGeral: number | null = null
 
   // ---- cabeçalho: células "RÓTULO: VALOR" (em qualquer tabela) + parágrafos ----
   const textos: string[] = [...paragrafos]
@@ -161,24 +213,32 @@ function interpretarDocx(tabelas: string[][][], paragrafos: string[]): FichaLida
     // "TOTAL MANGA CURTA: 44" → guarda para conferência
     const tot = texto.match(/TOTAL\s+(.+?)\s*:\s*(\d+)/i)
     if (tot) totaisDeclarados.set(tot[1].trim().toUpperCase(), parseInt(tot[2], 10))
+    // "TOTAL: 38" (sem nome) → total geral da ficha
+    const totGeral = texto.match(/^TOTAL\s*:\s*(\d+)\s*$/i)
+    if (totGeral && totalGeral == null) totalGeral = parseInt(totGeral[1], 10)
     const obs = texto.match(/^OBS\s*:?\s*(.+)/i)
     if (obs && !ficha.observacoes) ficha.observacoes = obs[1].trim()
   }
 
-  // ---- grades: tabelas cujo cabeçalho tem MASCULIN/FEMININ ----
+  // ---- grades: qualquer tabela com pares (tamanho, quantidade) ----
+  // Não exige cabeçalho MASCULIN/FEMININ: fichas costumam ter também uma
+  // tabela INFANTIL (ou unissex) sem essa divisão, e ela conta igual.
+  const lidas: GradeLida[] = []
   for (const tbl of tabelas) {
     const idxCab = tbl.findIndex((l) => l.some((c) => /^MASCULIN/i.test(c)) || l.some((c) => /^FEMININ/i.test(c)))
-    if (idxCab === -1) continue
 
-    // título da grade: primeira linha de célula única acima do cabeçalho
-    const titulo = tbl.slice(0, idxCab).map((l) => l.filter(Boolean).join(' ')).find(ehTituloModelagem) ?? ''
+    // sem cabeçalho de sexo, os dados começam na primeira linha
+    const inicioDados = idxCab === -1 ? 0 : idxCab + 1
+    // título da grade: linha de célula única antes dos dados
+    const titulo =
+      tbl.slice(0, Math.max(inicioDados, 1)).map((l) => l.filter(Boolean).join(' ')).find(ehTituloModelagem) ?? ''
     // posição das colunas masculina/feminina na linha de cabeçalho
-    const cab = tbl[idxCab]
+    const cab = idxCab === -1 ? [] : tbl[idxCab]
     const colMasc = cab.findIndex((c) => /^MASCULIN/i.test(c))
     const colFem = cab.findIndex((c) => /^FEMININ/i.test(c))
 
     const grade: Grade = {}
-    for (const linha of tbl.slice(idxCab + 1)) {
+    for (const linha of tbl.slice(inicioDados)) {
       for (let i = 0; i < linha.length - 1; i++) {
         const tam = linha[i]?.trim() ?? ''
         const qtdTxt = linha[i + 1]?.trim() ?? ''
@@ -197,19 +257,10 @@ function interpretarDocx(tabelas: string[][][], paragrafos: string[]): FichaLida
       }
     }
     if (Object.keys(grade).length === 0) continue
-
-    const nome = nomeModelagem(titulo, ficha.manga)
-    const total = somaGrade(grade)
-    const declarado = totaisDeclarados.get(nome.toUpperCase()) ?? totaisDeclarados.get(titulo.toUpperCase())
-    ficha.modelagens.push({ modelagem: nome, grade, total, totalDeclarado: declarado })
-    if (declarado != null && declarado !== total) {
-      avisos.push(
-        `"${nome}": a ficha declara ${declarado} peças, mas a tabela soma ${total}. Confira a grade.`,
-      )
-    }
+    lidas.push({ titulo, grade })
   }
 
-  ficha.total = ficha.modelagens.reduce((a, m) => a + m.total, 0)
+  montarModelagens(ficha, lidas, totaisDeclarados, totalGeral)
   return ficha
 }
 
@@ -264,6 +315,7 @@ function interpretarPdf(itens: Item[]): FichaLida {
     estampa: '', observacoes: '', modelagens: [], total: 0, avisos,
   }
   const totaisDeclarados = new Map<string, number>()
+  let totalGeral: number | null = null
 
   const ehRotulo = (t: string) =>
     CAMPOS.some(([r]) => r.test(t)) || /^(TOTAL|NOME\s*INDIVIDUAL|N[ÚU]MERO\s*INDIVIDUAL|KIT|OBS)/i.test(t)
@@ -276,6 +328,9 @@ function interpretarPdf(itens: Item[]): FichaLida {
       const texto = linha[i].texto
       const tot = texto.match(/TOTAL\s+(.+?)\s*:\s*(\d+)/i)
       if (tot) totaisDeclarados.set(tot[1].trim().toUpperCase(), parseInt(tot[2], 10))
+      // "TOTAL: 38" (sem nome) → total geral da ficha
+      const totGeral = texto.match(/^TOTAL\s*:\s*(\d+)\s*$/i)
+      if (totGeral && totalGeral == null) totalGeral = parseInt(totGeral[1], 10)
       for (const [re, campo] of CAMPOS) {
         if (campo === 'modelagens' || campo === 'total' || campo === 'avisos') continue
         if (ficha[campo]) continue
@@ -333,6 +388,12 @@ function interpretarPdf(itens: Item[]): FichaLida {
       blocosGrade.push(atual)
       continue
     }
+    // grade sem título próprio (ex.: tabela INFANTIL): abre um bloco implícito,
+    // que depois é somado à modelagem de mesmo nome
+    if (!atual && linha.some((it, i) => ehTamanho(it.texto) && ehNumero(linha[i + 1]?.texto ?? ''))) {
+      atual = { titulo: '', grade: {}, xMasc: Number.NaN, xFem: Number.NaN }
+      blocosGrade.push(atual)
+    }
     if (!atual) continue
     for (const it of linha) {
       if (/^MASCULIN/i.test(it.texto)) atual.xMasc = it.x
@@ -358,18 +419,12 @@ function interpretarPdf(itens: Item[]): FichaLida {
     }
   }
 
-  for (const b of blocosGrade) {
-    if (Object.keys(b.grade).length === 0) continue
-    const nome = nomeModelagem(b.titulo, ficha.manga)
-    const total = somaGrade(b.grade)
-    const declarado = totaisDeclarados.get(nome.toUpperCase()) ?? totaisDeclarados.get(b.titulo.toUpperCase())
-    ficha.modelagens.push({ modelagem: nome, grade: b.grade, total, totalDeclarado: declarado })
-    if (declarado != null && declarado !== total) {
-      avisos.push(`"${nome}": a ficha declara ${declarado} peças, mas a tabela soma ${total}. Confira a grade.`)
-    }
-  }
-
-  ficha.total = ficha.modelagens.reduce((a, m) => a + m.total, 0)
+  montarModelagens(
+    ficha,
+    blocosGrade.map((b) => ({ titulo: b.titulo, grade: b.grade })),
+    totaisDeclarados,
+    totalGeral,
+  )
   return ficha
 }
 
