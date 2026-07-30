@@ -21,6 +21,21 @@ const prioridadeBadge: Record<string, string> = {
   urgente: 'bg-rose-900 text-rose-300',
 }
 
+/**
+ * Ordena pela data de entrega: a mais próxima aparece primeiro, independente
+ * de quando o pedido foi criado. Pedidos sem data de entrega vão para o fim
+ * (não têm prazo definido); empates são desempatados pelo mais antigo.
+ * As datas são 'aaaa-mm-dd', então a comparação de texto já dá a ordem certa.
+ */
+const porDataEntrega = (a: Pedido, b: Pedido) => {
+  if (a.data_prevista !== b.data_prevista) {
+    if (!a.data_prevista) return 1
+    if (!b.data_prevista) return -1
+    return a.data_prevista < b.data_prevista ? -1 : 1
+  }
+  return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0
+}
+
 /** Mesma tela para as duas abas: Pedidos (arte pronta) e Pedidos para criação. */
 export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
   // admin OU administrativo criam/editam pedidos; funcionário só move de etapa
@@ -80,20 +95,23 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
 
   const filtrados = useMemo(() => {
     const q = busca.toLowerCase().trim()
-    return pedidos.filter((p) => {
-      // Pedidos = produção do dia a dia (em andamento). Concluídos e
-      // cancelados ficam na aba Arquivo.
-      if (p.status !== 'em_andamento') return false
-      // separa as abas: arte pronta x criação (pedidos antigos contam como 'pronto')
-      if ((p.tipo ?? 'pronto') !== tipo) return false
-      if (filtroEtapa && p.etapa_atual_id !== filtroEtapa) return false
-      if (!q) return true
-      return (
-        String(p.numero).includes(q) ||
-        p.cliente.toLowerCase().includes(q) ||
-        p.descricao.toLowerCase().includes(q)
-      )
-    })
+    return pedidos
+      .filter((p) => {
+        // Pedidos = produção do dia a dia (em andamento). Concluídos e
+        // cancelados ficam na aba Arquivo.
+        if (p.status !== 'em_andamento') return false
+        // separa as abas: arte pronta x criação (pedidos antigos contam como 'pronto')
+        if ((p.tipo ?? 'pronto') !== tipo) return false
+        if (filtroEtapa && p.etapa_atual_id !== filtroEtapa) return false
+        if (!q) return true
+        return (
+          String(p.numero).includes(q) ||
+          p.cliente.toLowerCase().includes(q) ||
+          p.descricao.toLowerCase().includes(q)
+        )
+      })
+      // entrega mais próxima primeiro (vale para o Kanban e para a Lista)
+      .sort(porDataEntrega)
   }, [pedidos, busca, filtroEtapa, tipo])
 
   // handlers estáveis (useCallback): permitem que o KanbanBoard memoizado
