@@ -1,0 +1,70 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Mesma identidade Supreme do dashboard: azul-marinho + vermelho da marca */
+  --color-slate-950: #060b26;
+  --color-slate-900: #0b1233;
+  --color-slate-800: #1a2455;
+  --color-slate-700: #2a3670;
+  --color-slate-600: #46538f;
+  --color-slate-500: #6b77ad;
+  --color-slate-400: #9aa3cc;
+  --color-slate-300: #c2c8e4;
+  --color-slate-200: #dfe3f2;
+
+  --color-red-400: #f4555c;
+  --color-red-500: #ec1c24;
+  --color-red-600: #d3131b;
+  --color-red-700: #b10e15;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-slate-950 text-slate-100 antialiased;
+  /* brilho suave atrás do cartão, dá profundidade sem pesar */
+  background-image:
+    radial-gradient(60rem 40rem at 50% -10%, rgb(236 28 36 / 0.14), transparent 70%),
+    radial-gradient(50rem 30rem at 90% 110%, rgb(42 54 112 / 0.5), transparent 70%);
+  background-attachment: fixed;
+}
+
+/* ---- animações suaves ---- */
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.surgir {
+  animation: surgir 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pulsar {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgb(96 165 250 / 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgb(96 165 250 / 0);
+  }
+}
+/* etapa atual da barra de progresso */
+.etapa-atual {
+  animation: pulsar 2s ease-in-out infinite;
+}
+
+/* respeita quem prefere menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  .surgir,
+  .etapa-atual {
+    animation: none;
+  }
+}

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
 import type { Pedido, Prioridade, StatusPedido, TipoPedido } from '../types'
 import { enviarAnexo } from '../lib/anexos'
+import { formatarDocumento, soDigitos } from '../utils/cpf'
 import { comprimirImagem } from '../utils/imagem'
 
 /** Modal de criação/edição de pedido (apenas admin), com anexo de imagens/arquivos. */
@@ -20,10 +21,13 @@ export default function PedidoFormModal({
 }) {
   const toast = useToast()
   const editando = Boolean(pedido)
-  const [numero, setNumero] = useState(() =>
-    pedido ? pedido.numero.toString() : String(Math.floor(10000 + Math.random() * 90000)),
-  )
+  // Ao criar, o número vem da sequência do banco (600, 601, 602…). Aqui só
+  // mostramos a prévia; o número definitivo é atribuído no momento de salvar,
+  // para dois cadastros simultâneos nunca receberem o mesmo.
+  const [numero, setNumero] = useState(pedido ? pedido.numero.toString() : '')
   const [cliente, setCliente] = useState(pedido?.cliente ?? '')
+  // CPF: autentica a consulta do cliente no Portal
+  const [cpf, setCpf] = useState(formatarDocumento(pedido?.cpf ?? ''))
   const [descricao, setDescricao] = useState(pedido?.descricao ?? '')
   const [quantidade, setQuantidade] = useState(pedido?.quantidade?.toString() ?? '1')
   const [prioridade, setPrioridade] = useState<Prioridade>(pedido?.prioridade ?? 'normal')
@@ -34,6 +38,18 @@ export default function PedidoFormModal({
   const [arquivos, setArquivos] = useState<File[]>([])
   const [salvando, setSalvando] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // prévia do próximo número da sequência (só ao criar)
+  useEffect(() => {
+    if (editando) return
+    let ativo = true
+    supabase.rpc('previa_numero_pedido').then(({ data }) => {
+      if (ativo && typeof data === 'number') setNumero(String(data))
+    })
+    return () => {
+      ativo = false
+    }
+  }, [editando])
 
   // pré-visualização das imagens selecionadas
   const [previews, setPreviews] = useState<Record<string, string>>({})
@@ -99,6 +115,8 @@ export default function PedidoFormModal({
     const num = parseInt(numero, 10)
     let error
     let pedidoId = pedido?.id ?? null
+    // número definitivo: ao criar, quem decide é o banco (sequência)
+    let numeroFinal = num
 
     if (editando && pedido) {
       ;({ error } = await supabase
@@ -106,6 +124,7 @@ export default function PedidoFormModal({
         .update({
           numero: num,
           cliente,
+          cpf: soDigitos(cpf) || null,
           descricao,
           quantidade: parseInt(quantidade, 10) || 1,
           prioridade,
@@ -123,24 +142,26 @@ export default function PedidoFormModal({
         .eq('id', pedido.id))
     } else {
       const res = await supabase.rpc('criar_pedido', {
-        p_numero: num,
+        // null = o banco atribui o próximo da sequência, de forma atômica
+        p_numero: null,
         p_cliente: cliente,
         p_descricao: descricao,
         p_quantidade: parseInt(quantidade, 10) || 1,
         p_prioridade: prioridade,
         p_data_prevista: dataPrevista || null,
         p_tipo: tipo,
+        p_cpf: soDigitos(cpf) || null,
       })
       error = res.error
       pedidoId = typeof res.data === 'string' && res.data ? res.data : null
-      // fallback: se a função do banco não devolver o id, busca pelo número
-      if (!error && !pedidoId) {
+      // descobre o número que o banco atribuiu (a prévia pode ter mudado)
+      if (!error && pedidoId) {
         const { data: criado } = await supabase
           .from('pedidos')
-          .select('id')
-          .eq('numero', num)
+          .select('numero')
+          .eq('id', pedidoId)
           .maybeSingle()
-        pedidoId = (criado?.id as string | undefined) ?? null
+        if (typeof criado?.numero === 'number') numeroFinal = criado.numero
       }
     }
 
@@ -153,12 +174,12 @@ export default function PedidoFormModal({
       return
     }
 
-    if (pedidoId) await enviarAnexos(pedidoId, num)
+    if (pedidoId) await enviarAnexos(pedidoId, numeroFinal)
     else if (arquivos.length > 0)
       toast('Pedido salvo, mas os anexos não puderam ser enviados. Anexe-os pela tela do pedido.', 'erro')
 
     setSalvando(false)
-    toast(editando ? 'Pedido atualizado.' : `Pedido ${numero} criado.`, 'sucesso')
+    toast(editando ? 'Pedido atualizado.' : `Pedido ${numeroFinal} criado.`, 'sucesso')
     onSalvo()
     onFechar()
   }
@@ -189,8 +210,11 @@ export default function PedidoFormModal({
                 className={inputCls}
               />
             ) : (
-              <div className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-300">
-                {numero}
+              <div
+                title="Numeração automática e sequencial"
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-300"
+              >
+                {numero || <span className="text-slate-600">gerando…</span>}
               </div>
             )}
           </div>
@@ -209,6 +233,21 @@ export default function PedidoFormModal({
         <div className="mt-3">
           <label className="text-xs font-medium text-slate-400">Cliente *</label>
           <input required value={cliente} onChange={(e) => setCliente(e.target.value)} className={inputCls} />
+        </div>
+
+        <div className="mt-3">
+          <label className="text-xs font-medium text-slate-400">CPF ou CNPJ do cliente</label>
+          <input
+            value={cpf}
+            onChange={(e) => setCpf(formatarDocumento(e.target.value))}
+            inputMode="numeric"
+            placeholder="000.000.000-00"
+            className={inputCls}
+          />
+          <p className="mt-1 text-[11px] text-slate-500">
+            Usado pelo cliente para acompanhar o pedido no Portal. Sem CPF, o pedido não pode ser
+            consultado lá.
+          </p>
         </div>
 
         <div className="mt-3">

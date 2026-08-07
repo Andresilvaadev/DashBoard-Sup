@@ -98,6 +98,8 @@ create table if not exists public.pedidos (
   status text not null default 'em_andamento' check (status in ('em_andamento','concluido','cancelado','arquivado')),
   -- aba do pedido: 'pronto' (Pedidos), 'criacao' (Criação de arte), 'caneca' (Canecas)
   tipo text not null default 'pronto' check (tipo in ('pronto','criacao','caneca')),
+  -- CPF do cliente (só dígitos): autentica a consulta no Portal do Cliente
+  cpf text,
   etapa_atual_id uuid references public.etapas(id),
   data_prevista date,
   concluido_em timestamptz,

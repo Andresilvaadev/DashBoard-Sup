@@ -38,6 +38,8 @@ export interface Pedido {
   id: string
   numero: number
   cliente: string
+  /** CPF do cliente (só dígitos) — autentica a consulta no Portal do Cliente */
+  cpf: string | null
   descricao: string
   quantidade: number
   prioridade: Prioridade

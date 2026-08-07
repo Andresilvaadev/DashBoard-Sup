@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:portal": "vite --config vite.portal.config.ts",
+    "build:portal": "tsc -b && vite build --config vite.portal.config.ts",
+    "preview:portal": "vite preview --config vite.portal.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
