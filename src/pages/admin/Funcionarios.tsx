@@ -25,6 +25,22 @@ const DESCRICAO_ROLE: Record<Role, string> = {
   funcionario: 'Acompanha e move os pedidos de etapa.',
 }
 
+/** Traduz os erros do Supabase para algo que o admin entenda e saiba resolver */
+function mensagemErroCadastro(msg: string | undefined): string {
+  if (!msg) return 'Falha ao criar usuário.'
+  if (/rate limit/i.test(msg)) {
+    return 'Limite de envio de e-mails do Supabase atingido. Isso só acontece quando o projeto ainda envia e-mail de confirmação — desligue "Confirm email" em Authentication → Providers → Email e aguarde alguns minutos.'
+  }
+  if (/already registered|already been registered/i.test(msg)) {
+    return 'Já existe uma conta com esse e-mail.'
+  }
+  if (/password/i.test(msg) && /6|short|least/i.test(msg)) {
+    return 'A senha precisa ter pelo menos 6 caracteres.'
+  }
+  if (/invalid.*email|email.*invalid/i.test(msg)) return 'E-mail inválido.'
+  return msg
+}
+
 export default function Funcionarios() {
   const toast = useToast()
   const { profile: eu } = useAuth()
@@ -49,15 +65,34 @@ export default function Funcionarios() {
   const criar = async (e: FormEvent) => {
     e.preventDefault()
     setSalvando(true)
+
+    // E-mail repetido: o Supabase NÃO devolve erro nesse caso (para não revelar
+    // quais e-mails existem) — ele reenvia um e-mail de confirmação, o que
+    // consome a cota de envios e leva ao "email rate limit exceeded". Barrar
+    // aqui evita o erro e diz o que realmente aconteceu.
+    const alvo = email.trim().toLowerCase()
+    const { data: jaExiste } = await supabase
+      .from('profiles')
+      .select('nome')
+      .ilike('email', alvo)
+      .maybeSingle()
+    if (jaExiste) {
+      setSalvando(false)
+      toast(`Já existe um funcionário com esse e-mail (${jaExiste.nome}).`, 'erro')
+      return
+    }
+
     // cliente auxiliar sem persistência: não derruba a sessão do admin
     const { data, error } = await criarClienteSignup().auth.signUp({
-      email,
+      email: alvo,
       password: senha,
       options: { data: { nome } },
     })
     if (error || !data.user) {
       setSalvando(false)
-      toast(error?.message ?? 'Falha ao criar usuário.', 'erro')
+      toast(mensagemErroCadastro(error?.message), 'erro')
+      // limite de envio de e-mails: mostra o painel com a orientação
+      if (error?.message && /rate limit/i.test(error.message)) setExigeConfirmacao(true)
       return
     }
     if (role !== 'funcionario') {
@@ -130,16 +165,25 @@ export default function Funcionarios() {
             </button>
           </div>
           <p className="mt-2 text-amber-200/80">
-            Quem for cadastrado só consegue entrar depois de clicar no link enviado por e-mail. Para
-            uso interno, desligue essa exigência uma única vez no painel do Supabase:
+            Enquanto essa exigência estiver ligada, cada cadastro dispara um e-mail — e o serviço de
+            e-mail embutido do Supabase tem cota baixa, o que causa o erro{' '}
+            <em>&quot;email rate limit exceeded&quot;</em>. Desligue a exigência uma única vez:
           </p>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-amber-200/80">
             <li>
-              Painel do Supabase → <strong>Authentication</strong> → <strong>Sign In / Providers</strong>{' '}
-              → <strong>Email</strong>
+              Abra a página{' '}
+              <a
+                href="https://supabase.com/dashboard/project/_/auth/providers"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-amber-300 underline"
+              >
+                Authentication → Providers
+              </a>{' '}
+              do seu projeto e expanda <strong>Email</strong>
             </li>
             <li>
-              Desmarque <strong>&quot;Confirm email&quot;</strong> e salve
+              Desligue <strong>&quot;Confirm email&quot;</strong> e clique em <strong>Save</strong>
             </li>
             <li>
               Para liberar quem já foi cadastrado, rode no <strong>SQL Editor</strong>:

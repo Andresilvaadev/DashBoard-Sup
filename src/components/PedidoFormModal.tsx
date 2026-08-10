@@ -3,8 +3,16 @@ import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
 import type { Pedido, Prioridade, StatusPedido, TipoPedido } from '../types'
 import { enviarAnexo } from '../lib/anexos'
-import { formatarDocumento, soDigitos } from '../utils/cpf'
 import { comprimirImagem } from '../utils/imagem'
+
+function gerarCodigo(): string {
+  const bytes = new Uint8Array(4)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()
+}
 
 /** Modal de criação/edição de pedido (apenas admin), com anexo de imagens/arquivos. */
 export default function PedidoFormModal({
@@ -26,8 +34,8 @@ export default function PedidoFormModal({
   // para dois cadastros simultâneos nunca receberem o mesmo.
   const [numero, setNumero] = useState(pedido ? pedido.numero.toString() : '')
   const [cliente, setCliente] = useState(pedido?.cliente ?? '')
-  // CPF: autentica a consulta do cliente no Portal
-  const [cpf, setCpf] = useState(formatarDocumento(pedido?.cpf ?? ''))
+  // Código de acesso: o cliente usa este código para consultar o pedido no Portal
+  const [codigoAcesso, setCodigoAcesso] = useState(pedido?.cpf ?? gerarCodigo())
   const [descricao, setDescricao] = useState(pedido?.descricao ?? '')
   const [quantidade, setQuantidade] = useState(pedido?.quantidade?.toString() ?? '1')
   const [prioridade, setPrioridade] = useState<Prioridade>(pedido?.prioridade ?? 'normal')
@@ -124,7 +132,7 @@ export default function PedidoFormModal({
         .update({
           numero: num,
           cliente,
-          cpf: soDigitos(cpf) || null,
+          cpf: codigoAcesso || null,
           descricao,
           quantidade: parseInt(quantidade, 10) || 1,
           prioridade,
@@ -150,7 +158,7 @@ export default function PedidoFormModal({
         p_prioridade: prioridade,
         p_data_prevista: dataPrevista || null,
         p_tipo: tipo,
-        p_cpf: soDigitos(cpf) || null,
+        p_cpf: codigoAcesso || null,
       })
       error = res.error
       pedidoId = typeof res.data === 'string' && res.data ? res.data : null
@@ -236,17 +244,35 @@ export default function PedidoFormModal({
         </div>
 
         <div className="mt-3">
-          <label className="text-xs font-medium text-slate-400">CPF ou CNPJ do cliente</label>
-          <input
-            value={cpf}
-            onChange={(e) => setCpf(formatarDocumento(e.target.value))}
-            inputMode="numeric"
-            placeholder="000.000.000-00"
-            className={inputCls}
-          />
+          <label className="text-xs font-medium text-slate-400">Código de acesso ao Portal</label>
+          <div className="mt-1 flex gap-2">
+            <input
+              value={codigoAcesso}
+              onChange={(e) => setCodigoAcesso(e.target.value.toUpperCase())}
+              placeholder="Ex.: A3F7K2M9"
+              className={`${inputCls} flex-1 font-mono tracking-widest`}
+            />
+            {!editando && (
+              <button
+                type="button"
+                title="Gerar novo código"
+                onClick={() => setCodigoAcesso(gerarCodigo())}
+                className="mt-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-400 hover:border-red-500 hover:text-red-400"
+              >
+                ↺
+              </button>
+            )}
+            <button
+              type="button"
+              title="Copiar código"
+              onClick={() => void navigator.clipboard.writeText(codigoAcesso)}
+              className="mt-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-xs text-slate-400 hover:border-red-500 hover:text-red-400"
+            >
+              ⎘
+            </button>
+          </div>
           <p className="mt-1 text-[11px] text-slate-500">
-            Usado pelo cliente para acompanhar o pedido no Portal. Sem CPF, o pedido não pode ser
-            consultado lá.
+            Compartilhe este código com o cliente para que ele consulte o pedido no Portal.
           </p>
         </div>
 

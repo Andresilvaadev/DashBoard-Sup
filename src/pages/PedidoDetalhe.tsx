@@ -321,6 +321,26 @@ export default function PedidoDetalhe() {
         </p>
         {pedido.descricao && <p className="mt-1 text-sm text-slate-500">{pedido.descricao}</p>}
 
+        {pedido.cpf && podeGerenciar && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-slate-500">Código do portal:</span>
+            <span className="font-mono text-sm font-semibold tracking-widest text-slate-200">
+              {pedido.cpf}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                void navigator.clipboard
+                  .writeText(pedido.cpf!)
+                  .then(() => toast('Código copiado!', 'sucesso'))
+              }
+              className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:border-red-500 hover:text-red-400"
+            >
+              Copiar
+            </button>
+          </div>
+        )}
+
         {/* Ações de admin: arquivar / cancelar / reativar / excluir */}
         {podeGerenciar && (
           <div className="mt-3 flex flex-wrap gap-2">

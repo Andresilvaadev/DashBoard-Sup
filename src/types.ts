@@ -38,7 +38,7 @@ export interface Pedido {
   id: string
   numero: number
   cliente: string
-  /** CPF do cliente (só dígitos) — autentica a consulta no Portal do Cliente */
+  /** Código de acesso ao Portal — o cliente usa este código para consultar o pedido */
   cpf: string | null
   descricao: string
   quantidade: number
