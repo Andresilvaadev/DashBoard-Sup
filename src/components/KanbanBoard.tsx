@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
@@ -12,10 +12,19 @@ const prioridadeBorda: Record<string, string> = {
   urgente: 'border-l-4 border-l-rose-500',
 }
 
+/** Tempo de toque parado antes do card "grudar" no dedo (ms) */
+const ESPERA_ARRASTE = 300
+/** Movimento tolerado antes disso — acima, o gesto é rolagem, não arrasto */
+const TOLERANCIA_ROLAGEM = 10
+
 /**
- * Quadro Kanban: uma coluna por etapa ativa. Arraste os cards entre colunas
- * (desktop) ou use o botão ⇄ (celular). Comandos de voz e Realtime também
- * movem os cards automaticamente.
+ * Quadro Kanban: uma coluna por etapa ativa.
+ *
+ * Mover um card:
+ *  • desktop — arrastar e soltar (API nativa do HTML5);
+ *  • celular — segurar o card e arrastar (Pointer Events, porque a API do
+ *    HTML5 não funciona em tela de toque), ou usar o botão ⇄;
+ *  • por voz e pelo Realtime, que movem os cards sozinhos.
  */
 // memo: o quadro só re-renderiza quando pedidos/etapas/fotos mudarem de fato
 export default memo(function KanbanBoard({
@@ -39,6 +48,25 @@ export default memo(function KanbanBoard({
   const [seletor, setSeletor] = useState<Pedido | null>(null) // bottom sheet p/ toque
   const hoje = hojeISO()
 
+  // ---- arraste por toque (celular) ----
+  const containerRef = useRef<HTMLDivElement>(null)
+  /** card grudado no dedo, com a posição atual do toque */
+  const [arraste, setArraste] = useState<{ pedido: Pedido; x: number; y: number } | null>(null)
+  const arrasteRef = useRef(arraste)
+  arrasteRef.current = arraste
+  /** toque iniciado mas ainda não confirmado como arraste */
+  const pressaoRef = useRef<{ timer: number; x: number; y: number } | null>(null)
+  const arrastando = arraste !== null
+
+  const cancelarPressao = () => {
+    if (pressaoRef.current) {
+      clearTimeout(pressaoRef.current.timer)
+      pressaoRef.current = null
+    }
+  }
+  // não deixa timer pendente se a tela for desmontada no meio do toque
+  useEffect(() => cancelarPressao, [])
+
   const mover = async (numero: number, etapa: Etapa) => {
     setMovendo(numero)
     const { error } = await supabase.rpc('mover_pedido', {
@@ -53,6 +81,90 @@ export default memo(function KanbanBoard({
     else toast(`Pedido ${numero} → ${etapa.nome}`, 'sucesso')
   }
 
+  /** Começa a contar o toque parado. Só toque — mouse segue pela API do HTML5. */
+  const aoTocarCard = (e: React.PointerEvent, p: Pedido) => {
+    if (e.pointerType !== 'touch') return
+    // toque em botão ou link do card é clique, não arraste
+    if ((e.target as HTMLElement).closest('button, a')) return
+    const x = e.clientX
+    const y = e.clientY
+    cancelarPressao()
+    const timer = window.setTimeout(() => {
+      pressaoRef.current = null
+      navigator.vibrate?.(12)
+      setArraste({ pedido: p, x, y })
+    }, ESPERA_ARRASTE)
+    pressaoRef.current = { timer, x, y }
+  }
+
+  /** Dedo andou antes do tempo: era rolagem, desiste do arraste */
+  const aoMoverNoCard = (e: React.PointerEvent) => {
+    const pressao = pressaoRef.current
+    if (!pressao) return
+    if (
+      Math.abs(e.clientX - pressao.x) > TOLERANCIA_ROLAGEM ||
+      Math.abs(e.clientY - pressao.y) > TOLERANCIA_ROLAGEM
+    ) {
+      cancelarPressao()
+    }
+  }
+
+  // Enquanto o card está grudado no dedo: acompanha o toque, destaca a coluna
+  // sob ele, rola o quadro nas bordas e solta o pedido ao levantar o dedo.
+  useEffect(() => {
+    if (!arrastando) return
+
+    const etapaSob = (x: number, y: number) =>
+      (document.elementFromPoint(x, y) as HTMLElement | null)
+        ?.closest('[data-etapa]')
+        ?.getAttribute('data-etapa') ?? null
+
+    const aoMover = (ev: PointerEvent) => {
+      setArraste((a) => (a ? { ...a, x: ev.clientX, y: ev.clientY } : a))
+      setColunaAlvo(etapaSob(ev.clientX, ev.clientY))
+    }
+
+    const aoSoltar = (ev: PointerEvent) => {
+      const atual = arrasteRef.current
+      const destino = etapaSob(ev.clientX, ev.clientY)
+      setArraste(null)
+      setColunaAlvo(null)
+      if (!atual || !destino) return
+      const etapa = etapas.find((x) => x.id === destino)
+      if (!etapa || atual.pedido.etapa_atual_id === etapa.id) return
+      navigator.vibrate?.(20)
+      void mover(atual.pedido.numero, etapa)
+    }
+
+    // segura a rolagem da página enquanto o dedo arrasta (precisa ser
+    // listener nativo não-passivo para o preventDefault valer)
+    const bloquearRolagem = (ev: TouchEvent) => ev.preventDefault()
+
+    document.addEventListener('pointermove', aoMover)
+    document.addEventListener('pointerup', aoSoltar)
+    document.addEventListener('pointercancel', aoSoltar)
+    document.addEventListener('touchmove', bloquearRolagem, { passive: false })
+
+    // com o dedo perto da borda, o quadro anda sozinho para o lado
+    const rolagem = window.setInterval(() => {
+      const a = arrasteRef.current
+      const cont = containerRef.current
+      if (!a || !cont) return
+      const margem = 56
+      if (a.x < margem) cont.scrollLeft -= 14
+      else if (a.x > window.innerWidth - margem) cont.scrollLeft += 14
+    }, 16)
+
+    return () => {
+      document.removeEventListener('pointermove', aoMover)
+      document.removeEventListener('pointerup', aoSoltar)
+      document.removeEventListener('pointercancel', aoSoltar)
+      document.removeEventListener('touchmove', bloquearRolagem)
+      clearInterval(rolagem)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arrastando, etapas])
+
   const onDrop = (e: React.DragEvent, etapa: Etapa) => {
     e.preventDefault()
     setColunaAlvo(null)
@@ -65,13 +177,21 @@ export default memo(function KanbanBoard({
 
   return (
     <>
-      <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0">
+      {/* items-start: cada coluna tem a altura do próprio conteúdo. Sem isso o
+          flex estica todas até a altura da mais cheia, e colunas vazias ficam
+          com um vão enorme embaixo. */}
+      <div
+        ref={containerRef}
+        className="-mx-4 flex snap-x items-start gap-3 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0"
+      >
         {etapas.map((etapa) => {
           const cards = pedidos.filter((p) => p.etapa_atual_id === etapa.id && p.status !== 'cancelado')
           const destacada = colunaAlvo === etapa.id
           return (
             <div
               key={etapa.id}
+              // usado pelo arraste por toque para saber sobre qual coluna o dedo está
+              data-etapa={etapa.id}
               onDragOver={(e) => {
                 e.preventDefault()
                 setColunaAlvo(etapa.id)
@@ -96,7 +216,9 @@ export default memo(function KanbanBoard({
               </div>
 
               {/* Cards */}
-              <div className="flex-1 space-y-2 overflow-y-auto p-2">
+              {/* min-h: mesmo vazia, a coluna mantém área suficiente para
+                  receber um card arrastado */}
+              <div className="min-h-20 flex-1 space-y-2 overflow-y-auto p-2">
                 {cards.map((p) => {
                   const atrasado = p.status === 'em_andamento' && p.data_prevista && p.data_prevista < hoje
                   return (
@@ -107,9 +229,17 @@ export default memo(function KanbanBoard({
                         e.dataTransfer.setData('text/plain', String(p.numero))
                         e.dataTransfer.effectAllowed = 'move'
                       }}
-                      className={`group cursor-grab overflow-hidden rounded-lg border border-slate-800 bg-slate-900 p-3 shadow-sm transition-colors hover:border-slate-600 active:cursor-grabbing ${
+                      // celular: segurar para arrastar (a API do HTML5 acima
+                      // não funciona em tela de toque)
+                      onPointerDown={(e) => aoTocarCard(e, p)}
+                      onPointerMove={aoMoverNoCard}
+                      onPointerUp={cancelarPressao}
+                      onPointerCancel={cancelarPressao}
+                      className={`group cursor-grab select-none overflow-hidden rounded-lg border border-slate-800 bg-slate-900 p-3 shadow-sm transition-colors [-webkit-touch-callout:none] hover:border-slate-600 active:cursor-grabbing ${
                         prioridadeBorda[p.prioridade]
-                      } ${movendo === p.numero ? 'opacity-40' : ''}`}
+                      } ${movendo === p.numero ? 'opacity-40' : ''} ${
+                        arraste?.pedido.id === p.id ? 'opacity-30 ring-2 ring-red-500' : ''
+                      }`}
                     >
                       {/* Foto do pedido (primeira imagem anexada) */}
                       {fotos?.[p.id] && (
@@ -202,6 +332,17 @@ export default memo(function KanbanBoard({
           )
         })}
       </div>
+
+      {/* Card fantasma acompanhando o dedo durante o arraste por toque */}
+      {arraste && (
+        <div
+          className="pointer-events-none fixed z-[90] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-red-500 bg-slate-900 px-3 py-2 shadow-2xl"
+          style={{ left: arraste.x, top: arraste.y }}
+        >
+          <p className="text-sm font-bold text-red-400">#{arraste.pedido.numero}</p>
+          <p className="max-w-[9rem] truncate text-[11px] text-slate-400">{arraste.pedido.cliente}</p>
+        </div>
+      )}
 
       {/* Seletor de etapa (toque/celular) */}
       {seletor && (

@@ -2,7 +2,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   nome text not null default '',
   email text not null default '',
-  -- admin = tudo | gestor = "Administrativo" (pedidos + semanal) | funcionario = move etapas
+  -- admin = tudo | gestor = "Gestor" (pedidos + semanal) | funcionario = move etapas
   role text not null default 'funcionario' check (role in ('admin', 'gestor', 'funcionario')),
   ativo boolean not null default true,
   created_at timestamptz not null default now()
@@ -29,7 +29,7 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 
 -- Helper: quem pode criar/editar pedidos e mexer no planejamento semanal
--- (administrador OU administrativo/gestor)
+-- (administrador OU gestor)
 create or replace function public.pode_gerenciar_pedidos()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
@@ -167,9 +167,9 @@ drop policy if exists "fichas_admin_insert" on public.fichas_tecnicas;
 drop policy if exists "fichas_admin_update" on public.fichas_tecnicas;
 drop policy if exists "fichas_admin_delete" on public.fichas_tecnicas;
 create policy "fichas_select" on public.fichas_tecnicas for select to authenticated using (true);
-create policy "fichas_admin_insert" on public.fichas_tecnicas for insert to authenticated with check (public.is_admin());
-create policy "fichas_admin_update" on public.fichas_tecnicas for update to authenticated using (public.is_admin());
-create policy "fichas_admin_delete" on public.fichas_tecnicas for delete to authenticated using (public.is_admin());
+create policy "fichas_gestor_insert" on public.fichas_tecnicas for insert to authenticated with check (public.pode_gerenciar_pedidos());
+create policy "fichas_gestor_update" on public.fichas_tecnicas for update to authenticated using (public.pode_gerenciar_pedidos());
+create policy "fichas_gestor_delete" on public.fichas_tecnicas for delete to authenticated using (public.pode_gerenciar_pedidos());
 
 do $$ begin alter publication supabase_realtime add table public.fichas_tecnicas; exception when duplicate_object then null; end $$;
 

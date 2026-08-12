@@ -1,6 +1,6 @@
 /**
  * admin       — acesso total (funcionários, fluxo, metas, sistema…)
- * gestor      — "Administrativo": cria/edita pedidos (Pedidos, Criação, Canecas) e o Semanal
+ * gestor      — "Gestor": cria/edita pedidos (Pedidos, Criação, Canecas) e o Semanal
  * funcionario — apenas move os pedidos de etapa
  */
 export type Role = 'admin' | 'gestor' | 'funcionario'

@@ -38,7 +38,7 @@ const porDataEntrega = (a: Pedido, b: Pedido) => {
 
 /** Mesma tela para as duas abas: Pedidos (arte pronta) e Pedidos para criação. */
 export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
-  // admin OU administrativo criam/editam pedidos; funcionário só move de etapa
+  // admin OU gestor criam/editam pedidos; funcionário só move de etapa
   const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const toast = useToast()
   const { pedidos, recarregar } = usePedidos()

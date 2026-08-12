@@ -7,7 +7,7 @@ import type { Profile, Role } from '../../types'
 /** Nome exibido de cada papel */
 const ROTULO_ROLE: Record<Role, string> = {
   admin: 'Administrador',
-  gestor: 'Administrativo',
+  gestor: 'Gestor',
   funcionario: 'Funcionário',
 }
 
@@ -21,7 +21,7 @@ const COR_ROLE: Record<Role, string> = {
 /** O que cada papel pode fazer (mostrado na tela para orientar o admin) */
 const DESCRICAO_ROLE: Record<Role, string> = {
   admin: 'Acesso total ao sistema.',
-  gestor: 'Cria e edita pedidos (Pedidos, Criação, Canecas) e monta o Semanal.',
+  gestor: 'Cria e edita pedidos e fichas técnicas (Pedidos, Criação, Canecas) e monta o Semanal.',
   funcionario: 'Acompanha e move os pedidos de etapa.',
 }
 
@@ -125,7 +125,7 @@ export default function Funcionarios() {
     else carregar()
   }
 
-  /** Define o papel do usuário (admin / administrativo / funcionário) */
+  /** Define o papel do usuário (admin / gestor / funcionário) */
   const definirRole = async (p: Profile, novo: Role) => {
     if (p.role === novo) return
     const { error } = await supabase.from('profiles').update({ role: novo }).eq('id', p.id)
@@ -241,7 +241,7 @@ export default function Funcionarios() {
                           title={DESCRICAO_ROLE.gestor}
                           className="text-slate-400 hover:text-sky-400"
                         >
-                          Tornar administrativo
+                          Tornar gestor
                         </button>
                       )}
                       {p.role !== 'funcionario' && (
@@ -301,7 +301,7 @@ export default function Funcionarios() {
                 <label className="text-xs font-medium text-slate-400">Função</label>
                 <select value={role} onChange={(e) => setRole(e.target.value as Role)} className={inputCls}>
                   <option value="funcionario">Funcionário</option>
-                  <option value="gestor">Administrativo</option>
+                  <option value="gestor">Gestor</option>
                   <option value="admin">Administrador</option>
                 </select>
                 <p className="mt-1 text-xs text-slate-500">{DESCRICAO_ROLE[role]}</p>

@@ -183,6 +183,7 @@ export default function RelatorioCortes() {
           {/* soma por modelagem no período */}
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
             <h3 className="mb-3 text-sm font-semibold">Cortado por modelagem</h3>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
@@ -209,6 +210,7 @@ export default function RelatorioCortes() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* lotes concluídos */}

@@ -125,7 +125,7 @@ export default function Layout() {
             {profile?.role === 'admin'
               ? 'Administrador'
               : profile?.role === 'gestor'
-                ? 'Administrativo'
+                ? 'Gestor'
                 : 'Funcionário'}
           </p>
           <button
@@ -138,7 +138,8 @@ export default function Layout() {
       </aside>
 
       {/* Conteúdo */}
-      <main className="min-w-0 flex-1 pb-20 md:ml-60 md:pb-6">
+      {/* pb reserva o espaço da barra inferior + área segura do iPhone */}
+      <main className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:ml-60 md:pb-6">
         {/* Topo (mobile) */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur md:hidden">
           <div className="flex items-center gap-2">
@@ -166,7 +167,7 @@ export default function Layout() {
       </main>
 
       {/* Navegação inferior (mobile) — rolável na horizontal para caber todas as abas */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-slate-800 bg-slate-900 md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-slate-800 bg-slate-900 pb-[env(safe-area-inset-bottom)] md:hidden">
         {links.map((l) => (
           <NavLink
             key={l.to}

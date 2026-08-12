@@ -1,3 +1,12 @@
+-- ============================================================
+-- NUMERAÇÃO SEQUENCIAL DOS PEDIDOS (a partir de 600)
+-- Rode INTEIRO no SQL Editor do Supabase. Seguro rodar mais de uma vez.
+--
+-- ATENÇÃO À ORDEM: este arquivo e migration_codigo_acesso_portal.sql
+-- redefinem a mesma função criar_pedido. Rode este PRIMEIRO e o do
+-- código de acesso DEPOIS, para o código alfanumérico prevalecer.
+-- ============================================================
+
 create sequence if not exists public.pedidos_numero_seq
   as integer
   start with 600
@@ -68,6 +77,12 @@ revoke all on function public.proximo_numero_pedido() from public;
 -- ------------------------------------------------------------
 -- 4. criar_pedido: quando o número não é informado, usa a sequência
 -- ------------------------------------------------------------
+
+-- Remove a versão de 7 parâmetros (sem CPF), caso ainda exista. Sem isso
+-- ficariam DUAS funções chamadas criar_pedido e a chamada do app viraria
+-- ambígua ("could not choose the best candidate function").
+drop function if exists public.criar_pedido(int, text, text, int, text, date, text);
+
 create or replace function public.criar_pedido(
   p_numero int,
   p_cliente text,
@@ -101,7 +116,8 @@ begin
                               etapa_atual_id, data_prevista, tipo, cpf, created_by)
   values (v_numero, p_cliente, coalesce(p_descricao,''), p_quantidade, p_prioridade,
           v_primeira, p_data_prevista, coalesce(p_tipo, 'pronto'),
-          nullif(regexp_replace(coalesce(p_cpf, ''), '\D', '', 'g'), ''), auth.uid())
+          -- código de acesso ao portal: alfanumérico, NÃO remover as letras
+          nullif(trim(upper(coalesce(p_cpf, ''))), ''), auth.uid())
   returning id into v_id;
 
   insert into public.historico (pedido_id, etapa_id, funcionario_id, observacao)

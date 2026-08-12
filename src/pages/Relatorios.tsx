@@ -654,6 +654,7 @@ export default function Relatorios() {
             {/* Tempo médio por etapa */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
               <h2 className="mb-3 text-sm font-semibold">Tempo médio por etapa</h2>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
@@ -685,6 +686,7 @@ export default function Relatorios() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
 
@@ -701,6 +703,7 @@ export default function Relatorios() {
                   {rel.totalCriacoes > 0 && ` • ${rel.totalCriacoes} arte(s)`}
                 </span>
               </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
@@ -722,6 +725,7 @@ export default function Relatorios() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
@@ -738,6 +742,7 @@ export default function Relatorios() {
                   {rel.totalCanecas > 0 && ` • ${rel.totalCanecas} caneca(s)`}
                 </span>
               </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
@@ -759,6 +764,7 @@ export default function Relatorios() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 

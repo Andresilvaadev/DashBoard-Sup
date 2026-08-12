@@ -300,7 +300,8 @@ export default function Perdas() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <table className="mt-3 w-full text-sm">
+              <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
                     <th className="pb-2 font-medium">Material</th>
@@ -320,6 +321,7 @@ export default function Perdas() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </>
           )}
         </div>

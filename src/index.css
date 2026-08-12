@@ -23,10 +23,37 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  /* rolagem suave dentro de áreas roláveis no iOS */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   @apply bg-slate-950 text-slate-100 antialiased;
+}
+
+/* Mídia nunca estoura a largura do contêiner (causa comum de rolagem
+   horizontal no celular) */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Palavras muito longas (e-mails, nomes de arquivo, URLs) quebram em vez
+   de empurrar o layout para os lados */
+h1, h2, h3, p, td, th, li, label {
+  overflow-wrap: anywhere;
+}
+
+/* No iPhone, campo com fonte menor que 16px faz o Safari dar zoom sozinho
+   ao focar. Só no mobile — no desktop o texto continua compacto. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 /* barra de rolagem discreta */

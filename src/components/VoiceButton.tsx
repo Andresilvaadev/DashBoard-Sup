@@ -231,7 +231,7 @@ export default function VoiceButton() {
       <button
         onClick={aoClicar}
         aria-label="Comando de voz"
-        className={`fixed bottom-20 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-xl transition-colors md:bottom-6 md:right-6 ${
+        className={`fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-xl transition-colors md:bottom-6 md:right-6 ${
           fase === 'gravando'
             ? 'mic-gravando bg-rose-600 text-white'
             : 'bg-red-600 text-white hover:bg-red-500'
@@ -253,14 +253,14 @@ export default function VoiceButton() {
       </button>
 
       {fase === 'gravando' && (
-        <div className="fixed bottom-36 right-4 z-50 rounded-lg bg-slate-800 px-4 py-2 text-sm shadow-lg md:bottom-24 md:right-6">
+        <div className="fixed bottom-[calc(9.25rem+env(safe-area-inset-bottom))] right-4 z-50 rounded-lg bg-slate-800 px-4 py-2 text-sm shadow-lg md:bottom-24 md:right-6">
           <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-rose-500 align-middle" />
           Ouvindo… fale por ex. <span className="font-semibold">"{exemplo}"</span>
         </div>
       )}
 
       {comando && fase === 'ocioso' && (!comando.numero || !comando.etapa) && (
-        <div className="fixed bottom-36 right-4 z-50 max-w-xs rounded-lg bg-amber-700 px-4 py-2 text-sm shadow-lg md:bottom-24 md:right-6">
+        <div className="fixed bottom-[calc(9.25rem+env(safe-area-inset-bottom))] right-4 z-50 max-w-xs rounded-lg bg-amber-700 px-4 py-2 text-sm shadow-lg md:bottom-24 md:right-6">
           Não entendi "{comando.transcricao}".
           {!comando.numero && ' Diga o número do pedido.'}
           {!comando.etapa && ' Diga a etapa.'}

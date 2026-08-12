@@ -1,12 +1,12 @@
 -- ============================================================
--- NOVO PAPEL: ADMINISTRATIVO (gestor)
+-- NOVO PAPEL: GESTOR
 -- Rode este arquivo INTEIRO no SQL Editor do Supabase.
 -- Seguro rodar mais de uma vez.
 --
--- O "Administrativo" pode:
+-- O "Gestor" pode:
 --   • criar, editar e excluir pedidos nas abas Pedidos, Criação e Canecas
 --   • montar e editar o planejamento Semanal (setores e itens)
--- O "Administrativo" NÃO pode:
+-- O "Gestor" NÃO pode:
 --   • gerenciar funcionários, fluxo de etapas, metas, estoque,
 --     configurações do sistema ou zerar a produção
 -- Funcionários comuns continuam apenas movendo pedidos de etapa.
@@ -32,7 +32,7 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 
 -- ------------------------------------------------------------
--- 3. PEDIDOS: criação/edição/exclusão liberada para o administrativo
+-- 3. PEDIDOS: criação/edição/exclusão liberada para o gestor
 -- ------------------------------------------------------------
 drop policy if exists "pedidos_admin_insert" on public.pedidos;
 drop policy if exists "pedidos_admin_update" on public.pedidos;
@@ -56,7 +56,7 @@ create policy "anexos_storage_delete_admin" on storage.objects
   for delete to authenticated using (bucket_id = 'anexos' and public.pode_gerenciar_pedidos());
 
 -- ------------------------------------------------------------
--- 4. Funções de pedido passam a aceitar o administrativo
+-- 4. Funções de pedido passam a aceitar o gestor
 -- ------------------------------------------------------------
 create or replace function public.criar_pedido(
   p_numero int,
@@ -144,6 +144,6 @@ create policy "plano_gestor_delete" on public.plano_semana
 
 -- ============================================================
 -- Para promover alguém pelo SQL (também dá para fazer pelo app,
--- em Admin → Funcionários → "Tornar administrativo"):
+-- em Admin → Funcionários → "Tornar gestor"):
 --   update public.profiles set role = 'gestor' where email = 'pessoa@empresa.com';
 -- ============================================================

@@ -18,7 +18,7 @@ export default function PedidoDetalhe() {
   const { numero } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
-  // admin OU administrativo gerenciam o pedido (status, aba, exclusão)
+  // admin OU gestor gerenciam o pedido (status, aba, exclusão)
   const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const { etapas, etapasDoFluxo } = useEtapas()
   const { pedidos: todosPedidos } = usePedidos()

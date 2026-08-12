@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
  *
  * Compartilha o mesmo banco, o mesmo cliente Supabase (src/lib/supabase.ts)
  * e as mesmas variáveis de ambiente, mas gera um bundle próprio: o código
- * administrativo nunca chega ao navegador do cliente.
+ * do dashboard nunca chega ao navegador do cliente.
  *
  *   npm run dev:portal     → desenvolvimento
  *   npm run build:portal   → gera dist-portal/ para publicar

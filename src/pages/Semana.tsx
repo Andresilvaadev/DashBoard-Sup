@@ -31,7 +31,7 @@ const iso = (d: Date) =>
  * cartão mostra ao vivo em qual etapa está agora, com a foto do pedido.
  */
 export default function Semana() {
-  // admin OU administrativo montam o planejamento; funcionário só consulta
+  // admin OU gestor montam o planejamento; funcionário só consulta
   const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const toast = useToast()
   const { pedidos } = usePedidos()

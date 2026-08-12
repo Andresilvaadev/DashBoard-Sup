@@ -9,7 +9,7 @@ interface AuthCtx {
   loading: boolean
   /** acesso total (funcionários, fluxo, metas, sistema) */
   isAdmin: boolean
-  /** admin OU administrativo: cria/edita pedidos e mexe no Semanal */
+  /** admin OU gestor: cria/edita pedidos e mexe no Semanal */
   podeGerenciarPedidos: boolean
   signIn: (email: string, senha: string) => Promise<string | null>
   signOut: () => Promise<void>

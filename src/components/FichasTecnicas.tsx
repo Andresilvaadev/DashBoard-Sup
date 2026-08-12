@@ -28,7 +28,8 @@ const vazia = (pedidoId: string): Partial<FichaTecnica> => ({
  * Cada unidade da grade = 1 par (frente + costa).
  */
 export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: string; numeroPedido: number }) {
-  const { isAdmin } = useAuth()
+  // a ficha faz parte do cadastro do pedido: admin E gestor preenchem
+  const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const toast = useToast()
   const [fichas, setFichas] = useState<FichaTecnica[]>([])
   const [anexos, setAnexos] = useState<Anexo[]>([])
@@ -221,7 +222,7 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
           Fichas técnicas ({fichas.length})
           <span className="ml-2 text-xs font-normal text-slate-500">uma por modelagem</span>
         </h2>
-        {isAdmin && (
+        {podeGerenciar && (
           <div className="flex gap-2">
             {/* leitura automática do PDF da ficha (texto direto, sem OCR) */}
             <input
@@ -254,7 +255,7 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
 
       {fichas.length === 0 ? (
         <p className="py-6 text-center text-sm text-slate-500">
-          Nenhuma ficha técnica. {isAdmin && 'Crie uma para usar o Mapa de Corte.'}
+          Nenhuma ficha técnica. {podeGerenciar && 'Crie uma para usar o Mapa de Corte.'}
         </p>
       ) : (
         <div className="space-y-3">
@@ -314,8 +315,8 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
                                 <img src={urls[a.path]} alt={a.nome} loading="lazy" className="h-20 w-full object-cover" />
                               )}
                               <button
-                                onClick={() => isAdmin && void definirLayout(f, a.id)}
-                                disabled={!isAdmin}
+                                onClick={() => podeGerenciar && void definirLayout(f, a.id)}
+                                disabled={!podeGerenciar}
                                 className={`flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[11px] transition-colors ${
                                   marcado ? 'bg-emerald-950 text-emerald-300' : 'text-slate-400 hover:text-slate-200'
                                 } disabled:cursor-default`}
@@ -334,7 +335,7 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
                     </>
                   )}
 
-                  {isAdmin && (
+                  {podeGerenciar && (
                     <div className="mt-2 flex gap-2">
                       <input
                         ref={(el) => {
