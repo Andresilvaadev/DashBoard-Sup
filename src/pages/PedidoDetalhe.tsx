@@ -8,7 +8,7 @@ import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Anexo, Historico, Pedido, StatusPedido } from '../types'
-import { ABAS, abaDoTipo, fluxoDoTipo, type Aba } from '../lib/abas'
+import { ABAS, abaDoTipo, fluxoDoTipo, rotulosConclusao, type Aba } from '../lib/abas'
 import { enviarAnexo, urlAnexo, urlsAnexos } from '../lib/anexos'
 import { pedidosQuePassaramNaFrente } from '../utils/fila'
 import { comprimirImagem } from '../utils/imagem'
@@ -367,20 +367,20 @@ export default function PedidoDetalhe() {
           {pedido.cliente} • {pedido.quantidade} un. • prioridade {pedido.prioridade}
           {pedido.data_prevista && ` • entrega ${formatarData(pedido.data_prevista)}`}
         </p>
-        {/* Arte pronta: flag interno da Criação — quem envia ao cliente se guia por ele.
+        {/* Marcação interna de "pronto" (arte, na aba Criação; o pedido, nas demais).
             Não mexe no status do pedido nem entra em relatórios. */}
-        {pedido.tipo === 'criacao' && (
-          <button
-            onClick={() => void marcarArte()}
-            className={`mt-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-              pedido.arte_concluida
-                ? 'border-emerald-700 bg-emerald-950 text-emerald-300 hover:bg-emerald-900'
-                : 'border-slate-700 text-slate-400 hover:border-emerald-700 hover:text-emerald-400'
-            }`}
-          >
-            {pedido.arte_concluida ? '✓ Arte concluída — clique para desmarcar' : '○ Marcar arte como concluída'}
-          </button>
-        )}
+        <button
+          onClick={() => void marcarArte()}
+          className={`mt-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            pedido.arte_concluida
+              ? 'border-emerald-700 bg-emerald-950 text-emerald-300 hover:bg-emerald-900'
+              : 'border-slate-700 text-slate-400 hover:border-emerald-700 hover:text-emerald-400'
+          }`}
+        >
+          {pedido.arte_concluida
+            ? `${rotulosConclusao(pedido.tipo).feito} — clique para desmarcar`
+            : rotulosConclusao(pedido.tipo).pendente}
+        </button>
 
         {pedido.cpf && podeGerenciar && (
           <div className="mt-2 flex items-center gap-2">

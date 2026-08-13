@@ -8,7 +8,7 @@ import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Pedido, TipoPedido } from '../types'
-import { abaDoTipo, fluxoDoTipo } from '../lib/abas'
+import { abaDoTipo, fluxoDoTipo, rotulosConclusao } from '../lib/abas'
 import { urlsAnexos } from '../lib/anexos'
 import { mapaUltrapassagens } from '../utils/fila'
 import { removerAnexosStorage } from '../utils/storage'
@@ -139,25 +139,36 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
   const excluirClique = useCallback((p: Pedido) => void excluir(p), [excluir])
 
   /**
-   * Liga/desliga o flag "arte pronta" (aba Criação) direto no card.
-   * Vai por RPC, e não por update na tabela: assim qualquer funcionário
-   * marca a arte sem ganhar permissão de editar o resto do pedido.
+   * Liga/desliga a marcação de "pronto" direto no card: a arte, na aba
+   * Criação; o pedido, nas demais. Vai por RPC, e não por update na tabela,
+   * para qualquer funcionário poder marcar sem ganhar permissão de editar
+   * o resto do pedido.
    */
   const marcarArte = useCallback(
     async (p: Pedido) => {
+      const eArte = (p.tipo ?? 'pronto') === 'criacao'
       const { error } = await supabase.rpc('marcar_arte', {
         p_pedido_id: p.id,
         p_concluida: !p.arte_concluida,
       })
       if (error) toast(error.message, 'erro')
       else {
-        toast(p.arte_concluida ? `#${p.numero}: arte desmarcada.` : `#${p.numero}: arte pronta!`, 'sucesso')
+        const oQue = eArte ? 'arte' : 'pedido'
+        toast(
+          p.arte_concluida
+            ? `#${p.numero}: ${oQue} desmarcado.`
+            : `#${p.numero}: ${eArte ? 'arte pronta!' : 'concluído!'}`,
+          'sucesso',
+        )
         recarregar()
       }
     },
     [toast, recarregar],
   )
   const marcarArteClique = useCallback((p: Pedido) => void marcarArte(p), [marcarArte])
+
+  // texto do botão de marcar: "arte" na aba Criação, "concluído" nas demais
+  const rotulos = rotulosConclusao(tipo)
 
   const hoje = hojeISO()
   const inputCls =
@@ -233,7 +244,8 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
           fotos={fotos}
           onEditar={podeGerenciar ? abrirEdicao : undefined}
           onExcluir={podeGerenciar ? excluirClique : undefined}
-          onMarcarArte={tipo === 'criacao' ? marcarArteClique : undefined}
+          onMarcarArte={marcarArteClique}
+          rotulosArte={rotulos}
         />
       )}
 
@@ -272,19 +284,17 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                {tipo === 'criacao' && (
-                  <button
-                    onClick={() => void marcarArte(p)}
-                    title={p.arte_concluida ? 'Desmarcar arte' : 'Marcar arte como concluída'}
-                    className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-                      p.arte_concluida
-                        ? 'bg-emerald-900 text-emerald-300 hover:bg-emerald-800'
-                        : 'border border-slate-700 text-slate-500 hover:border-emerald-700 hover:text-emerald-400'
-                    }`}
-                  >
-                    {p.arte_concluida ? '✓ Arte pronta' : '○ Marcar arte'}
-                  </button>
-                )}
+                <button
+                  onClick={() => void marcarArte(p)}
+                  title={p.arte_concluida ? 'Desmarcar' : 'Marcar como concluído'}
+                  className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+                    p.arte_concluida
+                      ? 'bg-emerald-900 text-emerald-300 hover:bg-emerald-800'
+                      : 'border border-slate-700 text-slate-500 hover:border-emerald-700 hover:text-emerald-400'
+                  }`}
+                >
+                  {p.arte_concluida ? rotulos.feito : rotulos.pendente}
+                </button>
                 {p.status === 'concluido' ? (
                   <span className="rounded-full bg-emerald-900 px-2.5 py-1 font-medium text-emerald-300">
                     ✓ Concluído

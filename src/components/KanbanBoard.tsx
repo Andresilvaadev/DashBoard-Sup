@@ -35,6 +35,7 @@ export default memo(function KanbanBoard({
   onEditar,
   onExcluir,
   onMarcarArte,
+  rotulosArte,
 }: {
   pedidos: Pedido[]
   etapas: Etapa[]
@@ -42,7 +43,9 @@ export default memo(function KanbanBoard({
   fotos?: Record<string, string> // pedido.id → URL da primeira foto anexada
   onEditar?: (p: Pedido) => void // apenas admin
   onExcluir?: (p: Pedido) => void // apenas admin
-  onMarcarArte?: (p: Pedido) => void // só na aba Criação — qualquer role (o artista marca)
+  onMarcarArte?: (p: Pedido) => void // qualquer funcionário pode marcar
+  /** texto do botão de marcar — muda conforme a aba (arte x pedido) */
+  rotulosArte?: { feito: string; pendente: string }
 }) {
   const toast = useToast()
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null)
@@ -295,14 +298,16 @@ export default memo(function KanbanBoard({
                         {onMarcarArte && (
                           <button
                             onClick={() => onMarcarArte(p)}
-                            title={p.arte_concluida ? 'Desmarcar arte' : 'Marcar arte como concluída'}
+                            title={p.arte_concluida ? 'Desmarcar' : 'Marcar como concluído'}
                             className={`rounded-full px-2 py-0.5 font-semibold transition-colors ${
                               p.arte_concluida
                                 ? 'bg-emerald-900 text-emerald-300 hover:bg-emerald-800'
                                 : 'border border-slate-700 text-slate-500 hover:border-emerald-700 hover:text-emerald-400'
                             }`}
                           >
-                            {p.arte_concluida ? '✓ Arte pronta' : '○ Marcar arte'}
+                            {p.arte_concluida
+                              ? (rotulosArte?.feito ?? '✓ Concluído')
+                              : (rotulosArte?.pendente ?? '○ Marcar como concluído')}
                           </button>
                         )}
                         {atrasado && (

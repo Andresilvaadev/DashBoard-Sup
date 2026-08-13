@@ -23,3 +23,14 @@ export const abaDoTipo = (tipo: TipoPedido | null | undefined): Aba =>
 
 export const fluxoDoTipo = (tipo: TipoPedido | null | undefined): FluxoEtapa =>
   abaDoTipo(tipo).fluxo
+
+/**
+ * Rótulos do botão que marca o item como pronto. É o mesmo recurso em todas
+ * as abas (o campo `arte_concluida`), só muda o nome: na Criação o que fica
+ * pronto é a arte; nas demais, o pedido em si.
+ */
+export function rotulosConclusao(tipo: TipoPedido | null | undefined) {
+  return (tipo ?? 'pronto') === 'criacao'
+    ? { feito: '✓ Arte pronta', pendente: '○ Marcar arte', acao: 'arte' }
+    : { feito: '✓ Concluído', pendente: '○ Marcar como concluído', acao: 'pedido' }
+}
