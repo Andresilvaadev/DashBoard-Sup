@@ -28,6 +28,29 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin' and ativo);
 $$;
 
+-- Marca/desmarca "arte pronta". Liberado para QUALQUER funcionário ativo:
+-- mexe só nesse campo, sem dar permissão de editar o resto do pedido.
+create or replace function public.marcar_arte(p_pedido_id uuid, p_concluida boolean)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_ativo boolean;
+begin
+  select ativo into v_ativo from public.profiles where id = auth.uid();
+  if not coalesce(v_ativo, false) then
+    raise exception 'Sem permissão para marcar a arte';
+  end if;
+
+  update public.pedidos set arte_concluida = coalesce(p_concluida, false)
+   where id = p_pedido_id;
+  if not found then
+    raise exception 'Pedido não encontrado';
+  end if;
+  return coalesce(p_concluida, false);
+end $$;
+
+revoke all on function public.marcar_arte(uuid, boolean) from public;
+grant execute on function public.marcar_arte(uuid, boolean) to authenticated;
+
 -- Helper: quem pode criar/editar pedidos e mexer no planejamento semanal
 -- (administrador OU gestor)
 create or replace function public.pode_gerenciar_pedidos()

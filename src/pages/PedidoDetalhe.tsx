@@ -170,13 +170,17 @@ export default function PedidoDetalhe() {
     }
   }
 
-  /** Flag interno da aba Criação: sinaliza que a arte está pronta para ir ao cliente. */
+  /**
+   * Flag interno da aba Criação: sinaliza que a arte está pronta para ir ao cliente.
+   * Vai por RPC, e não por update na tabela: assim qualquer funcionário marca a
+   * arte sem ganhar permissão de editar o resto do pedido.
+   */
   const marcarArte = async () => {
     if (!pedido) return
-    const { error } = await supabase
-      .from('pedidos')
-      .update({ arte_concluida: !pedido.arte_concluida })
-      .eq('id', pedido.id)
+    const { error } = await supabase.rpc('marcar_arte', {
+      p_pedido_id: pedido.id,
+      p_concluida: !pedido.arte_concluida,
+    })
     if (error) toast(error.message, 'erro')
     else carregar()
   }

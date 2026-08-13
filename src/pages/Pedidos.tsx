@@ -138,13 +138,17 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
   const abrirEdicao = useCallback((p: Pedido) => setModal(p), [])
   const excluirClique = useCallback((p: Pedido) => void excluir(p), [excluir])
 
-  /** Liga/desliga o flag "arte pronta" (aba Criação) direto no card, sem abrir o pedido. */
+  /**
+   * Liga/desliga o flag "arte pronta" (aba Criação) direto no card.
+   * Vai por RPC, e não por update na tabela: assim qualquer funcionário
+   * marca a arte sem ganhar permissão de editar o resto do pedido.
+   */
   const marcarArte = useCallback(
     async (p: Pedido) => {
-      const { error } = await supabase
-        .from('pedidos')
-        .update({ arte_concluida: !p.arte_concluida })
-        .eq('id', p.id)
+      const { error } = await supabase.rpc('marcar_arte', {
+        p_pedido_id: p.id,
+        p_concluida: !p.arte_concluida,
+      })
       if (error) toast(error.message, 'erro')
       else {
         toast(p.arte_concluida ? `#${p.numero}: arte desmarcada.` : `#${p.numero}: arte pronta!`, 'sucesso')
