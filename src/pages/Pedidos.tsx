@@ -138,6 +138,23 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
   const abrirEdicao = useCallback((p: Pedido) => setModal(p), [])
   const excluirClique = useCallback((p: Pedido) => void excluir(p), [excluir])
 
+  /** Liga/desliga o flag "arte pronta" (aba Criação) direto no card, sem abrir o pedido. */
+  const marcarArte = useCallback(
+    async (p: Pedido) => {
+      const { error } = await supabase
+        .from('pedidos')
+        .update({ arte_concluida: !p.arte_concluida })
+        .eq('id', p.id)
+      if (error) toast(error.message, 'erro')
+      else {
+        toast(p.arte_concluida ? `#${p.numero}: arte desmarcada.` : `#${p.numero}: arte pronta!`, 'sucesso')
+        recarregar()
+      }
+    },
+    [toast, recarregar],
+  )
+  const marcarArteClique = useCallback((p: Pedido) => void marcarArte(p), [marcarArte])
+
   const hoje = hojeISO()
   const inputCls =
     'rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-red-500'
@@ -212,6 +229,7 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
           fotos={fotos}
           onEditar={podeGerenciar ? abrirEdicao : undefined}
           onExcluir={podeGerenciar ? excluirClique : undefined}
+          onMarcarArte={tipo === 'criacao' ? marcarArteClique : undefined}
         />
       )}
 
@@ -250,6 +268,19 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                {tipo === 'criacao' && (
+                  <button
+                    onClick={() => void marcarArte(p)}
+                    title={p.arte_concluida ? 'Desmarcar arte' : 'Marcar arte como concluída'}
+                    className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+                      p.arte_concluida
+                        ? 'bg-emerald-900 text-emerald-300 hover:bg-emerald-800'
+                        : 'border border-slate-700 text-slate-500 hover:border-emerald-700 hover:text-emerald-400'
+                    }`}
+                  >
+                    {p.arte_concluida ? '✓ Arte pronta' : '○ Marcar arte'}
+                  </button>
+                )}
                 {p.status === 'concluido' ? (
                   <span className="rounded-full bg-emerald-900 px-2.5 py-1 font-medium text-emerald-300">
                     ✓ Concluído

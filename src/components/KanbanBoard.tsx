@@ -34,6 +34,7 @@ export default memo(function KanbanBoard({
   fotos,
   onEditar,
   onExcluir,
+  onMarcarArte,
 }: {
   pedidos: Pedido[]
   etapas: Etapa[]
@@ -41,6 +42,7 @@ export default memo(function KanbanBoard({
   fotos?: Record<string, string> // pedido.id → URL da primeira foto anexada
   onEditar?: (p: Pedido) => void // apenas admin
   onExcluir?: (p: Pedido) => void // apenas admin
+  onMarcarArte?: (p: Pedido) => void // só na aba Criação — qualquer role (o artista marca)
 }) {
   const toast = useToast()
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null)
@@ -290,6 +292,19 @@ export default memo(function KanbanBoard({
                         <p className="mt-1 truncate text-[11px] text-slate-500">{p.descricao}</p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                        {onMarcarArte && (
+                          <button
+                            onClick={() => onMarcarArte(p)}
+                            title={p.arte_concluida ? 'Desmarcar arte' : 'Marcar arte como concluída'}
+                            className={`rounded-full px-2 py-0.5 font-semibold transition-colors ${
+                              p.arte_concluida
+                                ? 'bg-emerald-900 text-emerald-300 hover:bg-emerald-800'
+                                : 'border border-slate-700 text-slate-500 hover:border-emerald-700 hover:text-emerald-400'
+                            }`}
+                          >
+                            {p.arte_concluida ? '✓ Arte pronta' : '○ Marcar arte'}
+                          </button>
+                        )}
                         {atrasado && (
                           <span className="rounded-full bg-rose-900 px-2 py-0.5 font-semibold text-rose-300">
                             Atrasado

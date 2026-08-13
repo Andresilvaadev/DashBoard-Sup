@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import FichasTecnicas from '../components/FichasTecnicas'
+import { useAbaAtiva } from '../contexts/AbaAtivaContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useEtapas } from '../hooks/useEtapas'
@@ -20,6 +21,7 @@ export default function PedidoDetalhe() {
   const toast = useToast()
   // admin OU gestor gerenciam o pedido (status, aba, exclusão)
   const { podeGerenciarPedidos: podeGerenciar } = useAuth()
+  const { setAba } = useAbaAtiva()
   const { etapas, etapasDoFluxo } = useEtapas()
   const { pedidos: todosPedidos } = usePedidos()
   const [pedido, setPedido] = useState<Pedido | null>(null)
@@ -32,7 +34,10 @@ export default function PedidoDetalhe() {
   const [apagandoAnexo, setApagandoAnexo] = useState<string | null>(null)
   // URLs assinadas para exibir as fotos direto na lista (bucket é privado)
   const [urlsImagens, setUrlsImagens] = useState<Record<string, string>>({})
-  const [imagemAberta, setImagemAberta] = useState<{ url: string; nome: string } | null>(null)
+  const [imagemAberta, setImagemAberta] = useState<{ url: string; nome: string; path: string } | null>(null)
+  /** path da foto sendo baixada no momento */
+  const [baixandoFoto, setBaixandoFoto] = useState<string | null>(null)
+  const [descricaoVisivel, setDescricaoVisivel] = useState(true)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const carregar = async () => {
@@ -78,6 +83,13 @@ export default function PedidoDetalhe() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [numero])
+
+  // mantém aceso no menu o item da aba do pedido (Criação/Canecas em vez de
+  // Pedidos, já que o detalhe mora em /pedidos/:numero para todas as abas)
+  useEffect(() => {
+    if (pedido) setAba(abaDoTipo(pedido.tipo).rota)
+  }, [pedido, setAba])
+  useEffect(() => () => setAba(null), [setAba])
 
   const mover = async (etapaId: string) => {
     if (!pedido) return
@@ -158,6 +170,17 @@ export default function PedidoDetalhe() {
     }
   }
 
+  /** Flag interno da aba Criação: sinaliza que a arte está pronta para ir ao cliente. */
+  const marcarArte = async () => {
+    if (!pedido) return
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ arte_concluida: !pedido.arte_concluida })
+      .eq('id', pedido.id)
+    if (error) toast(error.message, 'erro')
+    else carregar()
+  }
+
   const alterarStatus = async (status: StatusPedido) => {
     if (!pedido) return
     const agora = new Date().toISOString()
@@ -206,7 +229,7 @@ export default function PedidoDetalhe() {
     }
     await removerAnexosStorage((data as string[]) ?? [])
     toast(`Pedido ${pedido.numero} excluído.`, 'sucesso')
-    navigate('/pedidos')
+    navigate(abaDoTipo(pedido.tipo).rota)
   }
 
   /** Apaga um anexo: remove o registro e o arquivo do Storage. */
@@ -227,9 +250,29 @@ export default function PedidoDetalhe() {
     await removerAnexosStorage([a.path])
     setApagandoAnexo(null)
     // se a foto apagada estava aberta em tela cheia, fecha o visualizador
-    setImagemAberta((atual) => (atual?.url === urlsImagens[a.path] ? null : atual))
+    setImagemAberta((atual) => (atual?.path === a.path ? null : atual))
     toast(`"${a.nome}" apagado.`, 'sucesso')
     carregar()
+  }
+
+  /** Baixa a foto no arquivo original (sem a redução aplicada na miniatura). */
+  const baixarFoto = async (path: string, nome: string) => {
+    setBaixandoFoto(path)
+    try {
+      const url = await urlAnexo(path)
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = nome
+      link.click()
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      toast('Falha ao baixar a foto.', 'erro')
+    } finally {
+      setBaixandoFoto(null)
+    }
   }
 
   if (carregando) {
@@ -280,8 +323,9 @@ export default function PedidoDetalhe() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/pedidos" className="text-sm text-slate-400 hover:text-red-400">
-          ← Pedidos
+        {/* volta para a aba do próprio pedido (Pedidos / Criação / Canecas) */}
+        <Link to={abaDoTipo(pedido.tipo).rota} className="text-sm text-slate-400 hover:text-red-400">
+          ← {abaDoTipo(pedido.tipo).label}
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">Pedido #{pedido.numero}</h1>
@@ -319,7 +363,20 @@ export default function PedidoDetalhe() {
           {pedido.cliente} • {pedido.quantidade} un. • prioridade {pedido.prioridade}
           {pedido.data_prevista && ` • entrega ${formatarData(pedido.data_prevista)}`}
         </p>
-        {pedido.descricao && <p className="mt-1 text-sm text-slate-500">{pedido.descricao}</p>}
+        {/* Arte pronta: flag interno da Criação — quem envia ao cliente se guia por ele.
+            Não mexe no status do pedido nem entra em relatórios. */}
+        {pedido.tipo === 'criacao' && (
+          <button
+            onClick={() => void marcarArte()}
+            className={`mt-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              pedido.arte_concluida
+                ? 'border-emerald-700 bg-emerald-950 text-emerald-300 hover:bg-emerald-900'
+                : 'border-slate-700 text-slate-400 hover:border-emerald-700 hover:text-emerald-400'
+            }`}
+          >
+            {pedido.arte_concluida ? '✓ Arte concluída — clique para desmarcar' : '○ Marcar arte como concluída'}
+          </button>
+        )}
 
         {pedido.cpf && podeGerenciar && (
           <div className="mt-2 flex items-center gap-2">
@@ -469,6 +526,37 @@ export default function PedidoDetalhe() {
       </div>
       )}
 
+      {/* Descrição em destaque (o que o pedido pede) — recolhível */}
+      {pedido.descricao && (
+        <div className="rounded-xl border border-l-4 border-slate-800 border-l-amber-500 bg-slate-900 p-4">
+          <button
+            onClick={() => setDescricaoVisivel((v) => !v)}
+            className="flex w-full items-center justify-between gap-2"
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-400">Descrição</p>
+            <span
+              className={`text-xs text-slate-500 transition-transform duration-300 ${
+                descricaoVisivel ? 'rotate-0' : '-rotate-90'
+              }`}
+            >
+              ▼
+            </span>
+          </button>
+          {/* grid-rows 1fr→0fr: o próprio CSS anima a altura, sem medir nada em JS */}
+          <div
+            className={`grid transition-all duration-300 ease-in-out ${
+              descricaoVisivel ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+            }`}
+          >
+            <div className="overflow-hidden">
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-100">
+                {pedido.descricao}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Fichas técnicas (uma por modelagem) — base do Mapa de Corte */}
       <FichasTecnicas pedidoId={pedido.id} numeroPedido={pedido.numero} />
 
@@ -590,7 +678,9 @@ export default function PedidoDetalhe() {
                         }`}
                       >
                         <button
-                          onClick={() => setImagemAberta({ url: urlsImagens[a.path], nome: a.nome })}
+                          onClick={() =>
+                            setImagemAberta({ url: urlsImagens[a.path], nome: a.nome, path: a.path })
+                          }
                           title={a.nome}
                           className="block w-full"
                         >
@@ -603,6 +693,14 @@ export default function PedidoDetalhe() {
                           <span className="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-2 py-1 text-left text-[10px] text-slate-300">
                             {a.nome}
                           </span>
+                        </button>
+                        <button
+                          onClick={() => void baixarFoto(a.path, a.nome)}
+                          disabled={baixandoFoto === a.path}
+                          title="Baixar foto em qualidade original"
+                          className="absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950/80 text-xs text-slate-300 transition-opacity hover:bg-sky-700 hover:text-white md:opacity-0 md:focus:opacity-100 md:group-hover:opacity-100"
+                        >
+                          {baixandoFoto === a.path ? '…' : '↓'}
                         </button>
                         {podeGerenciar && (
                           <button
@@ -681,6 +779,16 @@ export default function PedidoDetalhe() {
           />
           <div className="mt-3 flex items-center gap-4">
             <p className="max-w-[60vw] truncate text-sm text-slate-300">{imagemAberta.nome}</p>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                void baixarFoto(imagemAberta.path, imagemAberta.nome)
+              }}
+              disabled={baixandoFoto === imagemAberta.path}
+              className="rounded-lg bg-sky-900 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-800 disabled:opacity-50"
+            >
+              {baixandoFoto === imagemAberta.path ? 'Baixando…' : '↓ Baixar original'}
+            </button>
             <a
               href={imagemAberta.url}
               target="_blank"

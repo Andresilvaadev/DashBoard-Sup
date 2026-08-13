@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { useAbaAtiva } from '../contexts/AbaAtivaContext'
 import { useAuth } from '../contexts/AuthContext'
 import VoiceButton from './VoiceButton'
 
@@ -79,6 +80,11 @@ const icones = {
 
 export default function Layout() {
   const { profile, isAdmin, signOut } = useAuth()
+  // no detalhe de um pedido, a aba do pedido manda no destaque do menu
+  const { aba } = useAbaAtiva()
+
+  /** Enquanto uma aba estiver publicada, só ela fica acesa. */
+  const ativo = (rota: string, isActive: boolean) => (aba ? aba === rota : isActive)
 
   const links = [
     { to: '/', label: 'Dashboard', icone: icones.dashboard },
@@ -113,7 +119,12 @@ export default function Layout() {
         </div>
         <nav className="flex flex-1 flex-col gap-1">
           {links.map((l) => (
-            <NavLink key={l.to} to={l.to} end={l.to === '/'} className={linkCls}>
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.to === '/'}
+              className={({ isActive }) => linkCls({ isActive: ativo(l.to, isActive) })}
+            >
               {l.icone}
               {l.label}
             </NavLink>
@@ -175,7 +186,7 @@ export default function Layout() {
             end={l.to === '/'}
             className={({ isActive }) =>
               `flex min-w-[4.2rem] flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium ${
-                isActive ? 'text-red-400' : 'text-slate-500'
+                ativo(l.to, isActive) ? 'text-red-400' : 'text-slate-500'
               }`
             }
           >

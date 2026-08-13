@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { Protected } from './components/Protected'
+import { AbaAtivaProvider } from './contexts/AbaAtivaContext'
 import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import Login from './pages/Login'
@@ -37,54 +38,56 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <BrowserRouter>
-          <Suspense fallback={<CarregandoPagina />}>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              {/* Visualizador de anexo em aba própria (sem o menu do app) */}
-              <Route
-                path="/anexo/:id"
-                element={
-                  <Protected>
-                    <VisualizarAnexo />
-                  </Protected>
-                }
-              />
-              <Route
-                element={
-                  <Protected>
-                    <Layout />
-                  </Protected>
-                }
-              >
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/pedidos" element={<Pedidos />} />
-                <Route path="/criacao" element={<Pedidos tipo="criacao" />} />
-                <Route path="/canecas" element={<Pedidos tipo="caneca" />} />
-                <Route path="/pedidos/:numero" element={<PedidoDetalhe />} />
-                <Route path="/semana" element={<Semana />} />
-                <Route path="/mapa-corte" element={<MapaCorte />} />
-                <Route path="/arquivo" element={<Arquivo />} />
-                <Route path="/estoque" element={<Estoque />} />
-                <Route path="/capacidade" element={<Capacidade />} />
-                <Route path="/perdas" element={<Perdas />} />
-                <Route path="/relatorios" element={<Relatorios />} />
+        <AbaAtivaProvider>
+          <BrowserRouter>
+            <Suspense fallback={<CarregandoPagina />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                {/* Visualizador de anexo em aba própria (sem o menu do app) */}
                 <Route
-                  path="/admin"
+                  path="/anexo/:id"
                   element={
-                    <Protected somenteAdmin>
-                      <Admin />
+                    <Protected>
+                      <VisualizarAnexo />
+                    </Protected>
+                  }
+                />
+                <Route
+                  element={
+                    <Protected>
+                      <Layout />
                     </Protected>
                   }
                 >
-                  <Route index element={<Funcionarios />} />
-                  <Route path="fluxo" element={<Fluxo />} />
-                  <Route path="sistema" element={<Sistema />} />
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/pedidos" element={<Pedidos />} />
+                  <Route path="/criacao" element={<Pedidos tipo="criacao" />} />
+                  <Route path="/canecas" element={<Pedidos tipo="caneca" />} />
+                  <Route path="/pedidos/:numero" element={<PedidoDetalhe />} />
+                  <Route path="/semana" element={<Semana />} />
+                  <Route path="/mapa-corte" element={<MapaCorte />} />
+                  <Route path="/arquivo" element={<Arquivo />} />
+                  <Route path="/estoque" element={<Estoque />} />
+                  <Route path="/capacidade" element={<Capacidade />} />
+                  <Route path="/perdas" element={<Perdas />} />
+                  <Route path="/relatorios" element={<Relatorios />} />
+                  <Route
+                    path="/admin"
+                    element={
+                      <Protected somenteAdmin>
+                        <Admin />
+                      </Protected>
+                    }
+                  >
+                    <Route index element={<Funcionarios />} />
+                    <Route path="fluxo" element={<Fluxo />} />
+                    <Route path="sistema" element={<Sistema />} />
+                  </Route>
                 </Route>
-              </Route>
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </AbaAtivaProvider>
       </ToastProvider>
     </AuthProvider>
   )

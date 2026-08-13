@@ -52,6 +52,8 @@ export interface Pedido {
   arquivado_em: string | null
   created_by: string | null
   created_at: string
+  /** flag interno da aba Criação: artista marca quando a arte está pronta para envio ao cliente */
+  arte_concluida: boolean
   etapa_atual?: Etapa | null
 }
 
