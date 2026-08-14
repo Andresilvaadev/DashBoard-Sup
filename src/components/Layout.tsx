@@ -86,16 +86,21 @@ export default function Layout() {
   /** Enquanto uma aba estiver publicada, só ela fica acesa. */
   const ativo = (rota: string, isActive: boolean) => (aba ? aba === rota : isActive)
 
+  // Dashboard, Relatórios e Capacidade são telas de gestão: só o admin vê
   const links = [
-    { to: '/', label: 'Dashboard', icone: icones.dashboard },
+    ...(isAdmin ? [{ to: '/', label: 'Dashboard', icone: icones.dashboard }] : []),
     { to: '/pedidos', label: 'Pedidos', icone: icones.pedidos },
     { to: '/criacao', label: 'Criação', icone: icones.criacao },
     { to: '/canecas', label: 'Canecas', icone: icones.canecas },
     { to: '/semana', label: 'Semana', icone: icones.semana },
     { to: '/mapa-corte', label: 'Corte', icone: icones.mapaCorte },
     { to: '/arquivo', label: 'Arquivo', icone: icones.arquivo },
-    { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
-    { to: '/capacidade', label: 'Capacidade', icone: icones.capacidade },
+    ...(isAdmin
+      ? [
+          { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
+          { to: '/capacidade', label: 'Capacidade', icone: icones.capacidade },
+        ]
+      : []),
     { to: '/perdas', label: 'Perdas', icone: icones.perdas },
     { to: '/estoque', label: 'Estoque', icone: icones.estoque },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icone: icones.admin }] : []),

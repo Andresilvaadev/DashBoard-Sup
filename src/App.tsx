@@ -61,7 +61,15 @@ export default function App() {
                     </Protected>
                   }
                 >
-                  <Route path="/" element={<Dashboard />} />
+                  {/* Telas de gestão: só admin. Quem não é cai em /pedidos. */}
+                  <Route
+                    path="/"
+                    element={
+                      <Protected somenteAdmin>
+                        <Dashboard />
+                      </Protected>
+                    }
+                  />
                   <Route path="/pedidos" element={<Pedidos />} />
                   <Route path="/criacao" element={<Pedidos tipo="criacao" />} />
                   <Route path="/canecas" element={<Pedidos tipo="caneca" />} />
@@ -70,9 +78,23 @@ export default function App() {
                   <Route path="/mapa-corte" element={<MapaCorte />} />
                   <Route path="/arquivo" element={<Arquivo />} />
                   <Route path="/estoque" element={<Estoque />} />
-                  <Route path="/capacidade" element={<Capacidade />} />
+                  <Route
+                    path="/capacidade"
+                    element={
+                      <Protected somenteAdmin>
+                        <Capacidade />
+                      </Protected>
+                    }
+                  />
                   <Route path="/perdas" element={<Perdas />} />
-                  <Route path="/relatorios" element={<Relatorios />} />
+                  <Route
+                    path="/relatorios"
+                    element={
+                      <Protected somenteAdmin>
+                        <Relatorios />
+                      </Protected>
+                    }
+                  />
                   <Route
                     path="/admin"
                     element={

@@ -20,6 +20,8 @@ export function Protected({ children, somenteAdmin = false }: { children: ReactN
       </div>
     )
   }
-  if (somenteAdmin && !isAdmin) return <Navigate to="/" replace />
+  // Cai em /pedidos, e não em "/": a raiz é o Dashboard, que também é
+  // exclusivo do admin — mandar para lá criaria um laço de redirecionamento.
+  if (somenteAdmin && !isAdmin) return <Navigate to="/pedidos" replace />
   return <>{children}</>
 }
