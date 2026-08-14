@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import { Protected } from './components/Protected'
 import { AbaAtivaProvider } from './contexts/AbaAtivaContext'
 import { AuthProvider } from './contexts/AuthContext'
+import { ConfirmProvider } from './contexts/ConfirmContext'
 import { ToastProvider } from './contexts/ToastContext'
 import Login from './pages/Login'
 
@@ -38,6 +39,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+        <ConfirmProvider>
         <AbaAtivaProvider>
           <BrowserRouter>
             <Suspense fallback={<CarregandoPagina />}>
@@ -88,6 +90,7 @@ export default function App() {
             </Suspense>
           </BrowserRouter>
         </AbaAtivaProvider>
+        </ConfirmProvider>
       </ToastProvider>
     </AuthProvider>
   )

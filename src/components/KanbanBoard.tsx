@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
+import { ABAS, type Aba } from '../lib/abas'
 import type { Etapa, Pedido } from '../types'
 import { formatarData, hojeISO } from '../utils/tempo'
 
@@ -36,6 +37,7 @@ export default memo(function KanbanBoard({
   onExcluir,
   onMarcarArte,
   rotulosArte,
+  onMoverAba,
 }: {
   pedidos: Pedido[]
   etapas: Etapa[]
@@ -46,6 +48,8 @@ export default memo(function KanbanBoard({
   onMarcarArte?: (p: Pedido) => void // qualquer funcionário pode marcar
   /** texto do botão de marcar — muda conforme a aba (arte x pedido) */
   rotulosArte?: { feito: string; pendente: string }
+  /** move o pedido para outra aba (Pedidos/Criação/Canecas) — só admin e gestor */
+  onMoverAba?: (p: Pedido, destino: Aba) => void
 }) {
   const toast = useToast()
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null)
@@ -393,6 +397,30 @@ export default memo(function KanbanBoard({
                 </button>
               ))}
             </div>
+
+            {/* Trocar de aba: cada aba tem seu próprio fluxo, então o pedido
+                recomeça na primeira etapa do destino */}
+            {onMoverAba && (
+              <div className="mt-4 border-t border-slate-800 pt-4">
+                <p className="mb-2 text-xs text-slate-500">Ou mover para outra aba:</p>
+                <div className="flex gap-2">
+                  {ABAS.filter((a) => a.tipo !== (seletor.tipo ?? 'pronto')).map((a) => (
+                    <button
+                      key={a.tipo}
+                      disabled={movendo !== null}
+                      onClick={() => {
+                        onMoverAba(seletor, a)
+                        setSeletor(null)
+                      }}
+                      className="flex-1 rounded-lg border border-slate-700 px-3 py-2.5 text-xs font-medium text-slate-300 transition-colors hover:border-sky-600 hover:text-sky-300 disabled:opacity-30"
+                    >
+                      → {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button
               onClick={() => setSeletor(null)}
               className="mt-4 w-full rounded-lg border border-slate-700 py-2.5 text-sm font-medium hover:bg-slate-800"

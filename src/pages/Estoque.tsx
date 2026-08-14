@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
 import type { EstoqueCategoria, EstoqueItem } from '../types'
 
@@ -18,6 +19,7 @@ const fmtQtd = (v: number | string) => {
 export default function Estoque() {
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const confirmar = useConfirm()
   const [categorias, setCategorias] = useState<EstoqueCategoria[]>([])
   const [itens, setItens] = useState<EstoqueItem[]>([])
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set())
@@ -110,9 +112,12 @@ export default function Estoque() {
   const excluirCategoria = async (c: EstoqueCategoria) => {
     const n = (itensPorCategoria[c.id] ?? []).length
     if (
-      !confirm(
-        `Excluir a categoria "${c.nome}"${n ? ` e seus ${n} item(ns)` : ''}? Essa ação não pode ser desfeita.`,
-      )
+      !(await confirmar({
+        titulo: 'Excluir categoria',
+        mensagem: `Excluir "${c.nome}"${n ? ` e seus ${n} item(ns)` : ''}? Essa ação não pode ser desfeita.`,
+        textoConfirmar: 'Excluir',
+        perigo: true,
+      }))
     )
       return
     const { error } = await supabase.from('estoque_categorias').delete().eq('id', c.id)
@@ -183,7 +188,15 @@ export default function Estoque() {
   }
 
   const excluirItem = async (it: EstoqueItem) => {
-    if (!confirm(`Excluir o item "${it.nome}"?`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir item',
+        mensagem: `Excluir o item "${it.nome}" do estoque?`,
+        textoConfirmar: 'Excluir',
+        perigo: true,
+      }))
+    )
+      return
     const { error } = await supabase.from('estoque_itens').delete().eq('id', it.id)
     if (error) toast(error.message, 'erro')
     else carregar()

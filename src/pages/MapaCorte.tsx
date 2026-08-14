@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import RelatorioCortes from '../components/RelatorioCortes'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { urlsAnexos } from '../lib/anexos'
@@ -21,6 +22,7 @@ import { formatarData, formatarDataHora } from '../utils/tempo'
 export default function MapaCorte() {
   const { profile } = useAuth()
   const toast = useToast()
+  const confirmar = useConfirm()
   const { pedidos } = usePedidos()
   const { etapas } = useEtapas()
   const [lote, setLote] = useState<LoteCorte | null>(null)
@@ -162,9 +164,11 @@ export default function MapaCorte() {
     if (!lote) return
     const numeros = pedidos.filter((p) => lote.pedido_ids.includes(p.id))
     if (
-      !confirm(
-        `Concluir o corte de ${numeros.length} pedido(s)?\n\nCada pedido avança automaticamente para a próxima etapa do fluxo dele.`,
-      )
+      !(await confirmar({
+        titulo: 'Concluir corte',
+        mensagem: `${numeros.length} pedido(s) serão avançados automaticamente para a próxima etapa do fluxo de cada um.`,
+        textoConfirmar: 'Concluir',
+      }))
     )
       return
     setConcluindo(true)
@@ -227,7 +231,15 @@ export default function MapaCorte() {
 
   const descartarLote = async () => {
     if (!lote) return
-    if (!confirm('Descartar este lote de corte? Os pedidos não são alterados.')) return
+    if (
+      !(await confirmar({
+        titulo: 'Descartar lote',
+        mensagem: 'Descartar este lote de corte? Os pedidos não são alterados.',
+        textoConfirmar: 'Descartar',
+        perigo: true,
+      }))
+    )
+      return
     await supabase.from('lotes_corte').update({ finalizado_em: new Date().toISOString() }).eq('id', lote.id)
     setLote(null)
     setGrupos(null)

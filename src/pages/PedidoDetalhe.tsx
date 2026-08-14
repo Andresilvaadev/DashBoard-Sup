@@ -4,6 +4,7 @@ import FichasTecnicas from '../components/FichasTecnicas'
 import { useAbaAtiva } from '../contexts/AbaAtivaContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
@@ -19,6 +20,7 @@ export default function PedidoDetalhe() {
   const { numero } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const confirmar = useConfirm()
   // admin OU gestor gerenciam o pedido (status, aba, exclusão)
   const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const { setAba } = useAbaAtiva()
@@ -144,26 +146,22 @@ export default function PedidoDetalhe() {
       return
     }
     if (
-      !confirm(
-        `Mover o pedido ${pedido.numero} para a aba "${destino.label}"? Ele vai para a etapa "${primeira.nome}".`,
-      )
+      !(await confirmar({
+        titulo: `Mover para ${destino.label}`,
+        mensagem: `O pedido ${pedido.numero} vai recomeçar na etapa "${primeira.nome}".`,
+        textoConfirmar: 'Mover',
+      }))
     )
       return
     setMovendo(true)
-    const { error: e1 } = await supabase
-      .from('pedidos')
-      .update({ tipo: destino.tipo })
-      .eq('id', pedido.id)
-    const { error: e2 } = e1
-      ? { error: e1 }
-      : await supabase.rpc('mover_pedido', {
-          p_numero: pedido.numero,
-          p_etapa_id: primeira.id,
-          p_observacao: `Movido para a aba ${destino.label}`,
-          p_via_voz: false,
-        })
+    // RPC em vez de update na tabela: o funcionário também move de aba,
+    // sem ganhar permissão de editar o resto do pedido
+    const { error } = await supabase.rpc('mover_pedido_aba', {
+      p_numero: pedido.numero,
+      p_tipo: destino.tipo,
+    })
     setMovendo(false)
-    if (e1 || e2) toast((e1 ?? e2)!.message, 'erro')
+    if (error) toast(error.message, 'erro')
     else {
       toast(`Pedido movido para ${destino.label}.`, 'sucesso')
       carregar()
@@ -200,7 +198,21 @@ export default function PedidoDetalhe() {
       cancelado: 'Pedido cancelado.',
       em_andamento: 'Pedido reativado.',
     }
-    if (!confirm(confirmacoes[status])) return
+    const titulos: Record<StatusPedido, string> = {
+      arquivado: 'Arquivar pedido',
+      concluido: 'Concluir pedido',
+      cancelado: 'Cancelar pedido',
+      em_andamento: 'Reativar pedido',
+    }
+    if (
+      !(await confirmar({
+        titulo: titulos[status],
+        mensagem: confirmacoes[status],
+        textoConfirmar: titulos[status].split(' ')[0],
+        perigo: status === 'cancelado',
+      }))
+    )
+      return
     const { error } = await supabase
       .from('pedidos')
       .update({
@@ -221,9 +233,12 @@ export default function PedidoDetalhe() {
   const excluirPedido = async () => {
     if (!pedido) return
     if (
-      !confirm(
-        `Excluir DEFINITIVAMENTE o pedido ${pedido.numero} (${pedido.cliente})? O histórico e os anexos dele também serão apagados. Essa ação não pode ser desfeita.`,
-      )
+      !(await confirmar({
+        titulo: `Excluir pedido ${pedido.numero}`,
+        mensagem: `O histórico e os anexos de ${pedido.cliente} também serão apagados. Essa ação não pode ser desfeita.`,
+        textoConfirmar: 'Excluir tudo',
+        perigo: true,
+      }))
     )
       return
     const { data, error } = await supabase.rpc('excluir_pedido', { p_numero: pedido.numero })
@@ -238,7 +253,15 @@ export default function PedidoDetalhe() {
 
   /** Apaga um anexo: remove o registro e o arquivo do Storage. */
   const excluirAnexo = async (a: Anexo) => {
-    if (!confirm(`Apagar "${a.nome}"? Esta ação não pode ser desfeita.`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Apagar anexo',
+        mensagem: `Apagar "${a.nome}"? Esta ação não pode ser desfeita.`,
+        textoConfirmar: 'Apagar',
+        perigo: true,
+      }))
+    )
+      return
     setApagandoAnexo(a.id)
     const { error } = await supabase.from('anexos').delete().eq('id', a.id)
     if (error) {
@@ -521,24 +544,24 @@ export default function PedidoDetalhe() {
           })}
         </div>
 
-        {/* Mover para outra aba (muda o fluxo e reinicia na 1ª etapa do destino) */}
-        {podeGerenciar && (
-          <div className="mt-4 border-t border-slate-800 pt-3">
-            <p className="mb-2 text-xs font-medium text-slate-400">Mover para outra aba</p>
-            <div className="flex flex-wrap gap-2">
-              {ABAS.filter((a) => a.tipo !== (pedido.tipo ?? 'pronto')).map((a) => (
-                <button
-                  key={a.tipo}
-                  onClick={() => void moverParaAba(a)}
-                  disabled={movendo}
-                  className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:border-sky-600 hover:text-sky-300 disabled:opacity-40"
-                >
-                  → {a.label}
-                </button>
-              ))}
-            </div>
+        {/* Mover para outra aba (muda o fluxo e reinicia na 1ª etapa do destino).
+            Liberado para todos: mover é atribuição do funcionário; o que ele
+            não pode é criar ou editar o pedido. */}
+        <div className="mt-4 border-t border-slate-800 pt-3">
+          <p className="mb-2 text-xs font-medium text-slate-400">Mover para outra aba</p>
+          <div className="flex flex-wrap gap-2">
+            {ABAS.filter((a) => a.tipo !== (pedido.tipo ?? 'pronto')).map((a) => (
+              <button
+                key={a.tipo}
+                onClick={() => void moverParaAba(a)}
+                disabled={movendo}
+                className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:border-sky-600 hover:text-sky-300 disabled:opacity-40"
+              >
+                → {a.label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </div>
       )}
 

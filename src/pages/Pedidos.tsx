@@ -4,11 +4,12 @@ import KanbanBoard from '../components/KanbanBoard'
 import PedidoFormModal from '../components/PedidoFormModal'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Pedido, TipoPedido } from '../types'
-import { abaDoTipo, fluxoDoTipo, rotulosConclusao } from '../lib/abas'
+import { ABAS, abaDoTipo, fluxoDoTipo, rotulosConclusao, type Aba } from '../lib/abas'
 import { urlsAnexos } from '../lib/anexos'
 import { mapaUltrapassagens } from '../utils/fila'
 import { removerAnexosStorage } from '../utils/storage'
@@ -41,6 +42,7 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
   // admin OU gestor criam/editam pedidos; funcionário só move de etapa
   const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const toast = useToast()
+  const confirmar = useConfirm()
   const { pedidos, recarregar } = usePedidos()
   const { etapas, etapasDoFluxo } = useEtapas()
   // cada aba usa o seu fluxo de etapas (produção / criação / caneca)
@@ -119,9 +121,12 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
   const excluir = useCallback(
     async (p: Pedido) => {
       if (
-        !confirm(
-          `Excluir DEFINITIVAMENTE o pedido ${p.numero} (${p.cliente})? O histórico e os anexos dele também serão apagados. Essa ação não pode ser desfeita.`,
-        )
+        !(await confirmar({
+          titulo: `Excluir pedido ${p.numero}`,
+          mensagem: `O histórico e os anexos de ${p.cliente} também serão apagados. Essa ação não pode ser desfeita.`,
+          textoConfirmar: 'Excluir tudo',
+          perigo: true,
+        }))
       )
         return
       const { data, error } = await supabase.rpc('excluir_pedido', { p_numero: p.numero })
@@ -133,7 +138,7 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
         recarregar()
       }
     },
-    [toast, recarregar],
+    [confirmar, toast, recarregar],
   )
   const abrirEdicao = useCallback((p: Pedido) => setModal(p), [])
   const excluirClique = useCallback((p: Pedido) => void excluir(p), [excluir])
@@ -166,6 +171,46 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
     [toast, recarregar],
   )
   const marcarArteClique = useCallback((p: Pedido) => void marcarArte(p), [marcarArte])
+
+  /**
+   * Move o pedido para OUTRA aba (Pedidos ↔ Criação ↔ Canecas). Cada aba tem
+   * seu próprio fluxo, então o pedido recomeça na primeira etapa do destino.
+   */
+  const moverParaAba = useCallback(
+    async (p: Pedido, destino: Aba) => {
+      const primeira = etapasDoFluxo(destino.fluxo)[0]
+      if (!primeira) {
+        toast(`A aba "${destino.label}" ainda não tem etapas configuradas.`, 'erro')
+        return
+      }
+      if (
+        !(await confirmar({
+          titulo: `Mover para ${destino.label}`,
+          mensagem: `O pedido ${p.numero} vai recomeçar na etapa "${primeira.nome}".`,
+          textoConfirmar: 'Mover',
+        }))
+      )
+        return
+
+      // RPC em vez de update na tabela: o funcionário também move de aba,
+      // sem ganhar permissão de editar o resto do pedido
+      const { error } = await supabase.rpc('mover_pedido_aba', {
+        p_numero: p.numero,
+        p_tipo: destino.tipo,
+      })
+
+      if (error) toast(error.message, 'erro')
+      else {
+        toast(`Pedido ${p.numero} movido para ${destino.label}.`, 'sucesso')
+        recarregar()
+      }
+    },
+    [confirmar, etapasDoFluxo, toast, recarregar],
+  )
+  const moverParaAbaClique = useCallback(
+    (p: Pedido, destino: Aba) => void moverParaAba(p, destino),
+    [moverParaAba],
+  )
 
   // texto do botão de marcar: "arte" na aba Criação, "concluído" nas demais
   const rotulos = rotulosConclusao(tipo)
@@ -246,6 +291,7 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
           onExcluir={podeGerenciar ? excluirClique : undefined}
           onMarcarArte={marcarArteClique}
           rotulosArte={rotulos}
+          onMoverAba={moverParaAbaClique}
         />
       )}
 

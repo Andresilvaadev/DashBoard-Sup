@@ -5,6 +5,7 @@ import {
 import StatCard from '../components/StatCard'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
 import type { Perda } from '../types'
 import { formatarDataHora } from '../utils/tempo'
@@ -38,6 +39,7 @@ function inicioDoFiltro(f: Filtro): Date {
 export default function Perdas() {
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const confirmar = useConfirm()
   const [perdas, setPerdas] = useState<Perda[]>([])
   const [movs, setMovs] = useState<{ pedido_id: string; funcionario_id: string | null }[]>([])
   const [totalPedidosPeriodo, setTotalPedidosPeriodo] = useState(0)
@@ -211,7 +213,15 @@ export default function Perdas() {
   }
 
   const excluir = async (p: Perda) => {
-    if (!confirm(`Excluir este registro de perda (${p.material})?`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir registro',
+        mensagem: `Excluir este registro de perda (${p.material})?`,
+        textoConfirmar: 'Excluir',
+        perigo: true,
+      }))
+    )
+      return
     const { error } = await supabase.from('perdas').delete().eq('id', p.id)
     if (error) toast(error.message, 'erro')
     else carregar()

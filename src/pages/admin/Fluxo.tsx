@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { useEtapas } from '../../hooks/useEtapas'
 import { ABAS } from '../../lib/abas'
 import { supabase } from '../../lib/supabase'
@@ -8,6 +9,7 @@ import type { Etapa, FluxoEtapa } from '../../types'
 /** Admin: criar, editar, reordenar e desativar etapas dos fluxos (produção e criação). */
 export default function Fluxo() {
   const toast = useToast()
+  const confirmar = useConfirm()
   const { etapas: todasEtapas, recarregar } = useEtapas()
   const [fluxo, setFluxo] = useState<FluxoEtapa>('producao')
   const [editando, setEditando] = useState<Etapa | 'nova' | null>(null)
@@ -74,7 +76,14 @@ export default function Fluxo() {
   }
 
   const excluir = async (e: Etapa) => {
-    if (!confirm(`Excluir a etapa "${e.nome}"? Se houver histórico usando esta etapa, ela será apenas desativada.`))
+    if (
+      !(await confirmar({
+        titulo: 'Excluir etapa',
+        mensagem: `Excluir a etapa "${e.nome}"? Se houver histórico usando esta etapa, ela será apenas desativada.`,
+        textoConfirmar: 'Excluir',
+        perigo: true,
+      }))
+    )
       return
     const { error } = await supabase.from('etapas').delete().eq('id', e.id)
     if (error) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useToast } from '../../contexts/ToastContext'
+import { useConfirm } from '../../contexts/ConfirmContext'
 import { supabase } from '../../lib/supabase'
 import { removerAnexosStorage } from '../../utils/storage'
 
@@ -17,6 +18,7 @@ const formatarTamanho = (bytes: number) =>
 /** Zona de perigo: zerar toda a produção antes de entregar o sistema ao cliente. */
 export default function Sistema() {
   const toast = useToast()
+  const confirmar = useConfirm()
   const [contagens, setContagens] = useState({ pedidos: 0, historico: 0, anexos: 0, metas: 0 })
   const [resumoFotos, setResumoFotos] = useState({ qtd: 0, bytes: 0 })
   const [armazenamento, setArmazenamento] = useState({ bytes: 0, arquivos: 0 })
@@ -91,10 +93,14 @@ export default function Sistema() {
       return
     }
     if (
-      !confirm(
-        `Apagar ${paths.length} foto(s) de pedidos finalizados (~${formatarMB(bytes)})?\n\n` +
+      !(await confirmar({
+        titulo: 'Liberar espaço',
+        mensagem:
+          `Apagar ${paths.length} foto(s) de pedidos finalizados (~${formatarMB(bytes)})? ` +
           'Os pedidos e o histórico são mantidos — só as imagens são removidas. Essa ação não pode ser desfeita.',
-      )
+        textoConfirmar: 'Apagar fotos',
+        perigo: true,
+      }))
     )
       return
     setLiberando(true)

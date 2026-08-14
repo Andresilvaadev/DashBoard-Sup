@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { usePedidos } from '../hooks/usePedidos'
 import { urlsAnexos } from '../lib/anexos'
 import { supabase } from '../lib/supabase'
@@ -34,6 +35,7 @@ export default function Semana() {
   // admin OU gestor montam o planejamento; funcionário só consulta
   const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const toast = useToast()
+  const confirmar = useConfirm()
   const { pedidos } = usePedidos()
   const [params, setParams] = useSearchParams()
   const [offset, setOffset] = useState(0)
@@ -197,7 +199,15 @@ export default function Semana() {
   const excluirSetor = async () => {
     const s = setores.find((x) => x.id === setorSel)
     if (!s) return
-    if (!confirm(`Excluir o setor "${s.nome}"? As tarefas dele vão para "Geral".`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir setor',
+        mensagem: `Excluir o setor "${s.nome}"? As tarefas dele vão para "Geral".`,
+        textoConfirmar: 'Excluir',
+        perigo: true,
+      }))
+    )
+      return
     const { error } = await supabase.from('semana_setores').delete().eq('id', s.id)
     if (error) {
       const semPermissao = error.code === '42501' || /row-level security|permission/i.test(error.message)
@@ -261,7 +271,15 @@ export default function Semana() {
   }
 
   const excluir = async (it: PlanoSemana) => {
-    if (!confirm('Remover este item do plano da semana?')) return
+    if (
+      !(await confirmar({
+        titulo: 'Remover item',
+        mensagem: 'Remover este item do plano da semana?',
+        textoConfirmar: 'Remover',
+        perigo: true,
+      }))
+    )
+      return
     const { error } = await supabase.from('plano_semana').delete().eq('id', it.id)
     if (error) toast(error.message, 'erro')
     else void carregar()

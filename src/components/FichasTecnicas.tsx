@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
+import { useConfirm } from '../contexts/ConfirmContext'
 import { enviarAnexo, urlsAnexos } from '../lib/anexos'
 import { supabase } from '../lib/supabase'
 import type { Anexo, FichaTecnica, Grade } from '../types'
@@ -31,6 +32,7 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
   // a ficha faz parte do cadastro do pedido: admin E gestor preenchem
   const { podeGerenciarPedidos: podeGerenciar } = useAuth()
   const toast = useToast()
+  const confirmar = useConfirm()
   const [fichas, setFichas] = useState<FichaTecnica[]>([])
   const [anexos, setAnexos] = useState<Anexo[]>([])
   const [urls, setUrls] = useState<Record<string, string>>({})
@@ -167,7 +169,15 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
   }
 
   const excluirFicha = async (f: FichaTecnica) => {
-    if (!confirm(`Excluir a ficha "${f.modelagem}"? As imagens dela também serão removidas.`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir ficha técnica',
+        mensagem: `Excluir a ficha "${f.modelagem}"? As imagens dela também serão removidas.`,
+        textoConfirmar: 'Excluir',
+        perigo: true,
+      }))
+    )
+      return
     const { error } = await supabase.from('fichas_tecnicas').delete().eq('id', f.id)
     if (error) toast(error.message, 'erro')
     else void carregar()
