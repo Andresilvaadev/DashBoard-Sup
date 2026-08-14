@@ -259,6 +259,18 @@ export default function PedidoDetalhe() {
     carregar()
   }
 
+  /**
+   * Abre a foto em tela cheia. Mostra a miniatura na hora (já está em cache)
+   * e troca pela imagem em tamanho real assim que a URL é resolvida — antes
+   * a tela cheia ficava exibindo a miniatura, e por isso saía borrada.
+   */
+  const abrirImagem = async (a: Anexo) => {
+    setImagemAberta({ url: urlsImagens[a.path], nome: a.nome, path: a.path })
+    const cheia = await urlAnexo(a.path)
+    if (!cheia) return
+    setImagemAberta((atual) => (atual?.path === a.path ? { ...atual, url: cheia } : atual))
+  }
+
   /** Baixa a foto no arquivo original (sem a redução aplicada na miniatura). */
   const baixarFoto = async (path: string, nome: string) => {
     setBaixandoFoto(path)
@@ -682,9 +694,7 @@ export default function PedidoDetalhe() {
                         }`}
                       >
                         <button
-                          onClick={() =>
-                            setImagemAberta({ url: urlsImagens[a.path], nome: a.nome, path: a.path })
-                          }
+                          onClick={() => void abrirImagem(a)}
                           title={a.nome}
                           className="block w-full"
                         >

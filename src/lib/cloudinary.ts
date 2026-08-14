@@ -37,11 +37,14 @@ export async function uploadCloudinary(file: File): Promise<string> {
 }
 
 /**
- * Gera uma miniatura otimizada via transformação de URL do Cloudinary
- * (redimensiona + qualidade/formato automáticos) — economiza banda nas listas.
+ * Gera uma miniatura via transformação de URL do Cloudinary.
+ *
+ * Largura generosa (o dobro do tamanho exibido) para ficar nítida em telas
+ * retina, e `q_auto:good` em vez do `q_auto` padrão, que era agressivo demais
+ * e deixava as fotos das artes com marcas de compressão.
  */
-export function miniaturaCloudinary(url: string, largura = 500): string {
+export function miniaturaCloudinary(url: string, largura = 1000): string {
   return url.includes('/upload/')
-    ? url.replace('/upload/', `/upload/c_fill,w_${largura},q_auto,f_auto/`)
+    ? url.replace('/upload/', `/upload/c_fill,w_${largura},q_auto:good,f_auto/`)
     : url
 }

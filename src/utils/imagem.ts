@@ -1,16 +1,19 @@
 /**
- * Comprime imagens no navegador antes do upload, para economizar
- * armazenamento e banda do Supabase. Redimensiona para caber em
- * LADO_MAX px (mantendo proporção) e recodifica em JPEG.
+ * Prepara imagens antes do upload. Na prática quase nada é alterado: só
+ * entra em ação com fotos MUITO grandes, para o upload não travar.
  *
  * - Só mexe em imagens (image/*). PDFs, artes .ai/.psd etc. passam intactos.
- * - Se a compressão não valer a pena (ficou maior ou o arquivo já é pequeno),
- *   devolve o arquivo original.
- * - PNGs pequenos (< LIMIAR) são preservados para não perder transparência à toa.
+ * - Arquivos abaixo do limiar sobem exatamente como estão, sem recodificar.
+ * - Se o resultado ficar maior que o original, o original é mantido — o que
+ *   costuma acontecer com a qualidade alta usada aqui, preservando a foto.
  */
-const LADO_MAX = 1600
-const QUALIDADE = 0.85
-const LIMIAR_BYTES = 300 * 1024 // abaixo disso não compensa comprimir
+// Valores altos de propósito: a foto guardada é a que o cliente baixa como
+// "original", então a prioridade é qualidade, não economia de espaço.
+// O limite de lado só existe para uma foto gigante não travar o upload.
+const LADO_MAX = 4000
+const QUALIDADE = 0.95
+// abaixo disso o arquivo sobe intacto, sem passar pelo canvas
+const LIMIAR_BYTES = 4 * 1024 * 1024
 
 export async function comprimirImagem(file: File): Promise<File> {
   if (!file.type.startsWith('image/')) return file

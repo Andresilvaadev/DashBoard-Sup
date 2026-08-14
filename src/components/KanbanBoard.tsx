@@ -258,58 +258,31 @@ export default memo(function KanbanBoard({
                           />
                         </Link>
                       )}
-                      <div className="flex items-start justify-between gap-2">
-                        <Link to={`/pedidos/${p.numero}`} className="min-w-0">
-                          <p className="font-bold text-red-400 hover:underline">#{p.numero}</p>
-                          <p className="truncate text-xs font-medium text-slate-300">{p.cliente}</p>
-                        </Link>
-                        <div className="flex shrink-0 gap-1">
-                          {onEditar && (
-                            <button
-                              onClick={() => onEditar(p)}
-                              title="Editar pedido"
-                              className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-amber-400"
-                            >
-                              ✎
-                            </button>
-                          )}
-                          {onExcluir && (
-                            <button
-                              onClick={() => onExcluir(p)}
-                              title="Excluir pedido"
-                              className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-rose-400"
-                            >
-                              ✕
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setSeletor(p)}
-                            title="Mover para outra etapa"
-                            className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-red-400"
-                          >
-                            ⇄
-                          </button>
-                        </div>
-                      </div>
-                      {p.descricao && (
-                        <p className="mt-1 truncate text-[11px] text-slate-500">{p.descricao}</p>
+                      {/* nº da OS e cliente: texto corrido, então o nome quebra
+                          em mais linhas em vez de ser cortado */}
+                      <Link to={`/pedidos/${p.numero}`} className="block leading-snug">
+                        <span className="mr-1.5 font-bold text-red-400 hover:underline">
+                          #{p.numero}
+                        </span>
+                        <span className="text-xs font-medium text-slate-300">{p.cliente}</span>
+                      </Link>
+                      {/* Ação principal do card: discreta, mas em linha própria */}
+                      {onMarcarArte && (
+                        <button
+                          onClick={() => onMarcarArte(p)}
+                          title={p.arte_concluida ? 'Desmarcar' : 'Marcar como concluído'}
+                          className={`mt-2 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                            p.arte_concluida
+                              ? 'border-emerald-700 bg-emerald-900 text-emerald-200 hover:bg-emerald-800'
+                              : 'border-slate-700 text-slate-400 hover:border-emerald-600 hover:text-emerald-300'
+                          }`}
+                        >
+                          {p.arte_concluida
+                            ? (rotulosArte?.feito ?? '✓ Concluído')
+                            : (rotulosArte?.pendente ?? '○ Marcar como concluído')}
+                        </button>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-                        {onMarcarArte && (
-                          <button
-                            onClick={() => onMarcarArte(p)}
-                            title={p.arte_concluida ? 'Desmarcar' : 'Marcar como concluído'}
-                            className={`rounded-full px-2 py-0.5 font-semibold transition-colors ${
-                              p.arte_concluida
-                                ? 'bg-emerald-900 text-emerald-300 hover:bg-emerald-800'
-                                : 'border border-slate-700 text-slate-500 hover:border-emerald-700 hover:text-emerald-400'
-                            }`}
-                          >
-                            {p.arte_concluida
-                              ? (rotulosArte?.feito ?? '✓ Concluído')
-                              : (rotulosArte?.pendente ?? '○ Marcar como concluído')}
-                          </button>
-                        )}
                         {atrasado && (
                           <span className="rounded-full bg-rose-900 px-2 py-0.5 font-semibold text-rose-300">
                             Atrasado
@@ -338,6 +311,36 @@ export default memo(function KanbanBoard({
                           <span className="text-slate-500">entrega {formatarData(p.data_prevista)}</span>
                         )}
                         <span className="text-slate-600">{p.quantidade} un.</span>
+                      </div>
+
+                      {/* Ações do card, no rodapé: separadas do conteúdo e sempre
+                          no mesmo lugar, com área de toque confortável */}
+                      <div className="mt-2 flex gap-1 border-t border-slate-800 pt-2">
+                        {onEditar && (
+                          <button
+                            onClick={() => onEditar(p)}
+                            title="Editar pedido"
+                            className="flex-1 rounded-md bg-slate-800 py-1.5 text-xs text-slate-400 hover:bg-slate-700 hover:text-amber-400"
+                          >
+                            ✎
+                          </button>
+                        )}
+                        {onExcluir && (
+                          <button
+                            onClick={() => onExcluir(p)}
+                            title="Excluir pedido"
+                            className="flex-1 rounded-md bg-slate-800 py-1.5 text-xs text-slate-400 hover:bg-slate-700 hover:text-rose-400"
+                          >
+                            ✕
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setSeletor(p)}
+                          title="Mover para outra etapa"
+                          className="flex-1 rounded-md bg-slate-800 py-1.5 text-xs text-slate-400 hover:bg-slate-700 hover:text-red-400"
+                        >
+                          ⇄
+                        </button>
                       </div>
                     </div>
                   )
