@@ -312,7 +312,11 @@ export default memo(function KanbanBoard({
                           </span>
                         )}
                         {p.data_prevista && (
-                          <span className="text-slate-500">entrega {formatarData(p.data_prevista)}</span>
+                          // data de entrega maior que as demais etiquetas: é o
+                          // dado que define a ordem de prioridade do card
+                          <span className="text-sm font-semibold text-slate-300">
+                            entrega {formatarData(p.data_prevista)}
+                          </span>
                         )}
                         <span className="text-slate-600">{p.quantidade} un.</span>
                       </div>
