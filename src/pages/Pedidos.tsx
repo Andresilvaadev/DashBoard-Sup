@@ -271,7 +271,7 @@ export default function Pedidos({ tipo = 'pronto' }: { tipo?: TipoPedido }) {
           className={`${inputCls} min-w-0 flex-1`}
         />
         <select value={filtroEtapa} onChange={(e) => setFiltroEtapa(e.target.value)} className={inputCls}>
-          <option value="">Todas etapas</option>
+          <option value="">Todas as etapas</option>
           {etapasDaAba.map((e) => (
             <option key={e.id} value={e.id}>
               {e.nome}

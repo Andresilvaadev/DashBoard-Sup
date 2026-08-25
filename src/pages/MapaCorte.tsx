@@ -8,8 +8,16 @@ import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { urlsAnexos } from '../lib/anexos'
 import { supabase } from '../lib/supabase'
-import type { Anexo, FichaTecnica, LoteCorte } from '../types'
-import { agruparPorModelagem, gradeEmLinhas, type GrupoCorte } from '../utils/corte'
+import type { Anexo, FichaTecnica, LoteCorte, PartesCorte } from '../types'
+import {
+  agruparPorModelagem,
+  especificacoesDoGrupo,
+  gradeEmLinhas,
+  observacoesDoGrupo,
+  partesDoTamanho,
+  tamanhoCortado,
+  type GrupoCorte,
+} from '../utils/corte'
 import { formatarData, formatarDataHora } from '../utils/tempo'
 
 /**
@@ -146,13 +154,18 @@ export default function MapaCorte() {
     }
   }
 
-  /** marca/desmarca um tamanho já cortado (salvo no lote) */
-  const alternarTamanho = async (modelagem: string, tamanho: string) => {
+  /**
+   * Marca/desmarca UMA parte do tamanho (camisa ou manga). O tamanho só
+   * conta como cortado quando as duas estiverem marcadas — o corpo e as
+   * mangas saem em momentos diferentes do corte.
+   */
+  const alternarParte = async (modelagem: string, tamanho: string, parte: keyof PartesCorte) => {
     if (!lote) return
-    const atual = lote.progresso?.[modelagem]?.[tamanho] ?? false
+    const atual = partesDoTamanho(lote.progresso?.[modelagem]?.[tamanho])
+    const novo: PartesCorte = { ...atual, [parte]: !atual[parte] }
     const progresso = {
       ...lote.progresso,
-      [modelagem]: { ...(lote.progresso?.[modelagem] ?? {}), [tamanho]: !atual },
+      [modelagem]: { ...(lote.progresso?.[modelagem] ?? {}), [tamanho]: novo },
     }
     setLote({ ...lote, progresso }) // otimista
     const { error } = await supabase.from('lotes_corte').update({ progresso }).eq('id', lote.id)
@@ -279,7 +292,7 @@ export default function MapaCorte() {
       const chave = g.modelagem.toUpperCase()
       for (const l of gradeEmLinhas(g.grade)) {
         total++
-        if (lote.progresso?.[chave]?.[l.tamanho]) feitos++
+        if (tamanhoCortado(lote.progresso?.[chave]?.[l.tamanho])) feitos++
       }
     }
     return { feitos, total }
@@ -475,7 +488,9 @@ export default function MapaCorte() {
             {grupos.map((g) => {
               const chave = g.modelagem.toUpperCase()
               const linhas = gradeEmLinhas(g.grade)
-              const feitosDoGrupo = linhas.filter((l) => lote?.progresso?.[chave]?.[l.tamanho]).length
+              const feitosDoGrupo = linhas.filter((l) =>
+                tamanhoCortado(lote?.progresso?.[chave]?.[l.tamanho]),
+              ).length
               return (
                 <div key={g.modelagem} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
@@ -498,6 +513,62 @@ export default function MapaCorte() {
                     </span>
                   </div>
 
+                  {/* Especificações do corte: o que a cortadeira precisa saber
+                      antes de encostar na tesoura */}
+                  {(() => {
+                    const especs = especificacoesDoGrupo(g)
+                    const obs = observacoesDoGrupo(g)
+                    if (especs.length === 0 && obs.length === 0) return null
+                    return (
+                      <div className="border-b border-slate-800 bg-slate-950/40 px-4 py-3">
+                        <div className="flex flex-wrap gap-x-5 gap-y-2">
+                          {especs.map((e) => (
+                            <div key={e.rotulo} className="min-w-0">
+                              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                                {e.rotulo}
+                                {e.divergente && (
+                                  <span
+                                    title="As fichas deste grupo têm valores diferentes — confira antes de cortar junto"
+                                    className="ml-1.5 rounded-full bg-amber-900 px-1.5 py-0.5 text-[9px] font-bold text-amber-300"
+                                  >
+                                    diferente
+                                  </span>
+                                )}
+                              </p>
+                              <p
+                                className={`text-sm font-semibold ${
+                                  e.divergente ? 'text-amber-300' : 'text-slate-200'
+                                }`}
+                              >
+                                {e.valores.map((v, i) => (
+                                  <span key={v.valor}>
+                                    {i > 0 && <span className="text-slate-600"> · </span>}
+                                    {v.valor}
+                                    {e.divergente && v.pedidos.length > 0 && (
+                                      <span className="ml-1 text-xs font-normal text-slate-500">
+                                        (#{v.pedidos.join(', #')})
+                                      </span>
+                                    )}
+                                  </span>
+                                ))}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {obs.map((o) => (
+                          <p key={o.texto} className="mt-2 text-xs text-amber-200/90">
+                            <span className="font-semibold">Obs.</span>{' '}
+                            {o.pedidos.length > 0 && (
+                              <span className="text-slate-500">#{o.pedidos.join(', #')} — </span>
+                            )}
+                            {o.texto}
+                          </p>
+                        ))}
+                      </div>
+                    )
+                  })()}
+
                   <div className="grid gap-4 p-4 md:grid-cols-2">
                     <div>
                       <table className="w-full max-w-sm text-sm">
@@ -505,12 +576,13 @@ export default function MapaCorte() {
                           <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
                             <th className="pb-2 font-medium">Tamanho</th>
                             <th className="pb-2 text-right font-medium">Pares</th>
-                            {lote && <th className="pb-2 text-right font-medium">Cortado</th>}
+                            {lote && <th className="pb-2 text-right font-medium">Camisas / Mangas</th>}
                           </tr>
                         </thead>
                         <tbody>
                           {linhas.map((l) => {
-                            const cortado = lote?.progresso?.[chave]?.[l.tamanho] ?? false
+                            const partes = partesDoTamanho(lote?.progresso?.[chave]?.[l.tamanho])
+                            const cortado = partes.camisa && partes.manga
                             return (
                               <tr
                                 key={l.tamanho}
@@ -521,18 +593,29 @@ export default function MapaCorte() {
                                 </td>
                                 <td className="py-1.5 text-right text-slate-300">{l.qtd}</td>
                                 {lote && (
-                                  <td className="py-1.5 text-right">
-                                    {/* marcador: qual tamanho já foi cortado */}
-                                    <button
-                                      onClick={() => void alternarTamanho(chave, l.tamanho)}
-                                      className={`rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors ${
-                                        cortado
-                                          ? 'border-emerald-700 bg-emerald-900 text-emerald-300'
-                                          : 'border-slate-600 text-slate-400 hover:border-emerald-600 hover:text-emerald-400'
-                                      }`}
-                                    >
-                                      {cortado ? '✓ Cortado' : 'Marcar'}
-                                    </button>
+                                  <td className="py-1.5">
+                                    {/* o tamanho só fica pronto com as duas partes cortadas */}
+                                    <div className="flex justify-end gap-1.5">
+                                      {(
+                                        [
+                                          ['camisa', 'Camisas'],
+                                          ['manga', 'Mangas'],
+                                        ] as const
+                                      ).map(([campo, rotulo]) => (
+                                        <button
+                                          key={campo}
+                                          onClick={() => void alternarParte(chave, l.tamanho, campo)}
+                                          title={`${rotulo} do tamanho ${l.tamanho}`}
+                                          className={`rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${
+                                            partes[campo]
+                                              ? 'border-emerald-700 bg-emerald-900 text-emerald-300'
+                                              : 'border-slate-600 text-slate-400 hover:border-emerald-600 hover:text-emerald-400'
+                                          }`}
+                                        >
+                                          {partes[campo] ? '✓' : '○'} {rotulo}
+                                        </button>
+                                      ))}
+                                    </div>
                                   </td>
                                 )}
                               </tr>

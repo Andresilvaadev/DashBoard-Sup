@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { GrupoCorte } from './corte'
-import { gradeEmLinhas } from './corte'
+import { especificacoesDoGrupo, gradeEmLinhas } from './corte'
 
 /** Baixa a imagem e converte para dataURL (jsPDF não aceita URL remota). */
 async function imagemParaDataUrl(url: string): Promise<{ dados: string; formato: string } | null> {
@@ -63,6 +63,30 @@ export async function gerarPdfMapaCorte(d: DadosMapaCorte) {
     doc.setFontSize(10)
     doc.setTextColor(90)
     doc.text(`Total: ${g.total} pares`, larguraPagina - 14, y, { align: 'right' })
+
+    // Especificações do corte (tecido, gola, punho…) logo abaixo do título:
+    // é o que a cortadeira precisa conferir antes de cortar.
+    const especs = especificacoesDoGrupo(g)
+    if (especs.length > 0) {
+      y += 5
+      doc.setFontSize(9)
+      doc.setTextColor(40)
+      const linha = especs
+        .map((e) => {
+          const valores = e.valores
+            .map((v) =>
+              e.divergente && v.pedidos.length > 0
+                ? `${v.valor} (#${v.pedidos.join(', #')})`
+                : v.valor,
+            )
+            .join(' · ')
+          return `${e.rotulo}: ${valores}${e.divergente ? ' [DIFERENTE]' : ''}`
+        })
+        .join('    ')
+      const linhasEspec = doc.splitTextToSize(linha, larguraPagina - 28) as string[]
+      doc.text(linhasEspec, 14, y)
+      y += linhasEspec.length * 4.5 - 3
+    }
 
     autoTable(doc, {
       startY: y + 3,

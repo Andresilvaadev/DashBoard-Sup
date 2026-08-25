@@ -163,12 +163,24 @@ export interface ResumoCorte {
   totalPares: number
 }
 
+/**
+ * Partes cortadas de um tamanho: o corpo da peça e as mangas saem em
+ * momentos diferentes, e o tamanho só fica pronto com os dois cortados.
+ */
+export interface PartesCorte {
+  camisa: boolean
+  manga: boolean
+}
+
 /** Lote de corte: pedidos selecionados + progresso por tamanho */
 export interface LoteCorte {
   id: string
   pedido_ids: string[]
-  /** { "MANGA LONGA": { "M MASC": true } } */
-  progresso: Record<string, Record<string, boolean>>
+  /**
+   * { "MANGA LONGA": { "M MASC": { camisa: true, manga: false } } }
+   * Lotes antigos gravavam só `true`/`false`; continuam sendo lidos.
+   */
+  progresso: Record<string, Record<string, boolean | Partial<PartesCorte> | null>>
   /** preenchido ao concluir — base do relatório de cortes */
   resumo?: ResumoCorte | Record<string, never>
   finalizado_em: string | null

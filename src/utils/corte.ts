@@ -1,4 +1,4 @@
-import type { FichaTecnica, Grade } from '../types'
+import type { FichaTecnica, Grade, PartesCorte } from '../types'
 
 // ============================================================
 // Lógica do Mapa de Corte (fora dos componentes).
@@ -82,6 +82,105 @@ export interface GrupoCorte {
   layoutAnexoId: string | null
   /** true quando NENHUMA ficha do grupo tem Layout de Corte definido */
   semLayout: boolean
+}
+
+/**
+ * Lê as partes cortadas de um tamanho, aceitando os formatos antigos:
+ * lotes anteriores gravavam só `true` (tamanho inteiro pronto) e, por um
+ * período, as chaves `frente`/`costa`.
+ */
+export const partesDoTamanho = (
+  v: boolean | Partial<PartesCorte & { frente: boolean; costa: boolean }> | undefined | null,
+): PartesCorte => {
+  if (typeof v === 'object' && v !== null) {
+    return {
+      camisa: Boolean(v.camisa ?? v.frente),
+      manga: Boolean(v.manga ?? v.costa),
+    }
+  }
+  return { camisa: Boolean(v), manga: Boolean(v) }
+}
+
+/** O tamanho só está cortado quando camisa E manga foram feitas. */
+export const tamanhoCortado = (
+  v: boolean | Partial<PartesCorte & { frente: boolean; costa: boolean }> | undefined | null,
+): boolean => {
+  const p = partesDoTamanho(v)
+  return p.camisa && p.manga
+}
+
+/** Uma especificação de corte do grupo (tecido, gola, punho…) */
+export interface EspecCorte {
+  rotulo: string
+  /** valores distintos entre as fichas do grupo; mais de um = elas divergem */
+  valores: { valor: string; pedidos: number[] }[]
+  /** true quando as fichas do grupo não combinam neste campo */
+  divergente: boolean
+}
+
+/**
+ * Punho interessa só como sim/não para o corte. A ficha escreve de várias
+ * formas ("SIM (LONGA)", "RIBANA", "NÃO"), então reduz para os dois casos.
+ */
+const punhoSimNao = (v: string) => (/^(n[ãa]o|sem\b|nenhum|0|-)/i.test(v.trim()) ? 'Não' : 'Sim')
+
+/**
+ * Campos da ficha que o corte precisa conhecer, na ordem de leitura.
+ * O modelo da manga fica de fora: não muda o corte.
+ */
+const CAMPOS_CORTE: [string, keyof FichaTecnica, ((v: string) => string)?][] = [
+  ['Tecido', 'tecido'],
+  ['Gola', 'gola'],
+  ['Punho', 'punho', punhoSimNao],
+  ['Estampa', 'estampa'],
+]
+
+/**
+ * Especificações de corte de um grupo.
+ *
+ * Um grupo junta fichas de pedidos diferentes com a mesma modelagem — e elas
+ * podem ter tecido ou gola distintos. Em vez de mostrar só o primeiro valor
+ * (o que levaria a cortar no tecido errado), devolve TODOS os valores com os
+ * pedidos de cada um, marcando quando divergem.
+ */
+export function especificacoesDoGrupo(grupo: GrupoCorte): EspecCorte[] {
+  const especs: EspecCorte[] = []
+
+  for (const [rotulo, campo, normalizar] of CAMPOS_CORTE) {
+    const porValor = new Map<string, number[]>()
+    for (const f of grupo.fichas) {
+      const bruto = String(f[campo] ?? '').trim()
+      if (!bruto) continue
+      const valor = normalizar ? normalizar(bruto) : bruto
+      const chave = normalizar ? valor : valor.toUpperCase()
+      const pedidos = porValor.get(chave) ?? []
+      const numero = f.pedido?.numero
+      if (typeof numero === 'number' && !pedidos.includes(numero)) pedidos.push(numero)
+      porValor.set(chave, pedidos)
+    }
+    if (porValor.size === 0) continue
+    especs.push({
+      rotulo,
+      valores: [...porValor.entries()].map(([valor, pedidos]) => ({ valor, pedidos })),
+      divergente: porValor.size > 1,
+    })
+  }
+
+  return especs
+}
+
+/** Observações das fichas do grupo, sem repetir texto igual. */
+export function observacoesDoGrupo(grupo: GrupoCorte): { texto: string; pedidos: number[] }[] {
+  const porTexto = new Map<string, number[]>()
+  for (const f of grupo.fichas) {
+    const texto = String(f.observacoes ?? '').trim()
+    if (!texto) continue
+    const pedidos = porTexto.get(texto) ?? []
+    const numero = f.pedido?.numero
+    if (typeof numero === 'number' && !pedidos.includes(numero)) pedidos.push(numero)
+    porTexto.set(texto, pedidos)
+  }
+  return [...porTexto.entries()].map(([texto, pedidos]) => ({ texto, pedidos }))
 }
 
 const chaveModelagem = (m: string) => m.trim().toLowerCase()
