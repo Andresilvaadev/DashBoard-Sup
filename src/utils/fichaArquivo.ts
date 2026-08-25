@@ -14,6 +14,8 @@ import type { Grade } from '../types'
 export interface ModelagemLida {
   modelagem: string
   grade: Grade
+  /** tecido desta peça — shorts e camisa podem ser de tecidos diferentes */
+  tecido: string
   total: number
   /** total declarado no cabeçalho (quando existe), para conferência */
   totalDeclarado?: number
@@ -53,12 +55,65 @@ export const ehTamanho = (t: string) =>
 
 const ehNumero = (t: string) => /^\d{1,4}$/.test(t.trim())
 
-/** título de grade que indica a modelagem (ex.: "MANGA CURTA", "RAGLAN") */
-const ehTituloModelagem = (t: string) =>
-  /^(MANGA\s+\w+|RAGLAN|CAMISA|CAMISETA|BABY\s*LOOK|REGATA|POLO)/i.test(t.trim()) && t.trim().length < 40
+/**
+ * Peças que NÃO são camisa. Cada uma vira uma modelagem separada, com nome
+ * padronizado — assim a grade do shorts nunca é somada à da camisa, mesmo
+ * que o título venha escrito de outro jeito ("TAMANHOS SHORT", "GRADE DO
+ * SHORT", "SHORT MASC/FEM"…).
+ *
+ * A ordem importa: o primeiro padrão que casar define o nome.
+ */
+const PECAS_SEPARADAS: [RegExp, string][] = [
+  [/CAL[ÇC][AÃ]O/i, 'Calção'],
+  [/SHORTS?/i, 'Shorts'],
+  [/BERMUDA/i, 'Bermuda'],
+  [/CAL[ÇC]A/i, 'Calça'],
+  [/LEGGING/i, 'Legging'],
+  [/AGASALHO/i, 'Agasalho'],
+  [/JAQUETA/i, 'Jaqueta'],
+  [/MOLETOM/i, 'Moletom'],
+  [/COLETE/i, 'Colete'],
+  [/MACAQUINHO/i, 'Macaquinho'],
+  [/SAIA/i, 'Saia'],
+  [/BON[ÉE]/i, 'Boné'],
+  [/TOUCA/i, 'Touca'],
+  [/MEIA/i, 'Meia'],
+  [/\bTOPS?\b/i, 'Top'],
+]
 
-/** títulos genéricos: não servem como nome de modelagem por si só */
-const ehTituloGenerico = (t: string) => /^(CAMISA|CAMISETA)$/i.test(t.trim())
+/** palavras que indicam camisa (a peça padrão da ficha) */
+const RE_CAMISA = /MANGA\s+\w+|RAGLAN|CAMISA|CAMISETA|BABY\s*LOOK|REGATA|POLO|UNIFORME/i
+
+/**
+ * Título de grade que indica a modelagem.
+ *
+ * Busca a palavra em QUALQUER posição do texto, não só no começo: fichas
+ * costumam escrever "TAMANHOS SHORT" ou "GRADE CAMISA", e exigir que o
+ * título começasse pela palavra fazia o título ser descartado — a grade
+ * herdava o nome da camisa e as duas peças acabavam somadas.
+ */
+const ehTituloModelagem = (t: string) => {
+  const s = t.trim()
+  if (s.length === 0 || s.length >= 40) return false
+  return PECAS_SEPARADAS.some(([re]) => re.test(s)) || RE_CAMISA.test(s)
+}
+
+/**
+ * Títulos que não servem como nome por si só: ou são a peça padrão (camisa),
+ * ou são só um cabeçalho de tabela. Nos dois casos o nome vem do modelo da
+ * manga, para as tabelas da mesma camisa continuarem sendo somadas.
+ */
+const ehTituloGenerico = (t: string) => {
+  const s = t.trim()
+  return (
+    /^(CAMISAS?|CAMISETAS?|UNIFORMES?)$/i.test(s) ||
+    /^(TAMANHOS?|GRADE|GRADES|MEDIDAS?|QUANTIDADES?)\b/i.test(s)
+  )
+}
+
+/** "TECIDO: DRY FIT" → "DRY FIT" (usado para o tecido de cada modelagem) */
+const tecidoDeTexto = (t: string): string =>
+  t.match(/TECIDO[^:]*:\s*(.+)/i)?.[1]?.trim() ?? ''
 
 const normalizaTamanho = (t: string) => t.trim().toUpperCase().replace(/\s+/g, ' ')
 const ehInfantil = (t: string) => /AN|C$/i.test(t.trim())
@@ -69,6 +124,8 @@ const somaGrade = (g: Grade) => Object.values(g).reduce((a, b) => a + b, 0)
 interface GradeLida {
   titulo: string
   grade: Grade
+  /** tecido declarado junto desta grade; vazio = usa o tecido geral da ficha */
+  tecido?: string
 }
 
 /**
@@ -82,7 +139,7 @@ function montarModelagens(
   totaisDeclarados: Map<string, number>,
   totalGeralDeclarado: number | null,
 ) {
-  for (const { titulo, grade } of lidas) {
+  for (const { titulo, grade, tecido } of lidas) {
     if (Object.keys(grade).length === 0) continue
     const nome = nomeModelagem(titulo, ficha.manga)
     const existente = ficha.modelagens.find((m) => m.modelagem === nome)
@@ -90,10 +147,19 @@ function montarModelagens(
       for (const [tam, qtd] of Object.entries(grade)) {
         existente.grade[tam] = (existente.grade[tam] ?? 0) + qtd
       }
+      // a tabela pode trazer o tecido só na segunda parte da mesma modelagem
+      if (!existente.tecido && tecido) existente.tecido = tecido
     } else {
       const declarado =
         totaisDeclarados.get(nome.toUpperCase()) ?? totaisDeclarados.get(titulo.toUpperCase())
-      ficha.modelagens.push({ modelagem: nome, grade: { ...grade }, total: 0, totalDeclarado: declarado })
+      ficha.modelagens.push({
+        modelagem: nome,
+        grade: { ...grade },
+        // sem tecido próprio, herda o tecido geral do cabeçalho da ficha
+        tecido: tecido || ficha.tecido,
+        total: 0,
+        totalDeclarado: declarado,
+      })
     }
   }
 
@@ -116,9 +182,21 @@ function montarModelagens(
   }
 }
 
-/** nome final da modelagem: usa o título da grade, ou o modelo da manga */
+/**
+ * Nome final da modelagem.
+ *
+ * Peça que não é camisa (shorts, bermuda…) recebe nome padronizado e nunca
+ * cai na regra da manga — é o que impede a grade do shorts de ser somada à
+ * da camisa. Título de camisa ou cabeçalho genérico usa o modelo da manga,
+ * para as tabelas da MESMA camisa (infantil + adulto) continuarem juntas.
+ */
 function nomeModelagem(titulo: string, manga: string): string {
   const t = titulo.trim()
+
+  for (const [re, nome] of PECAS_SEPARADAS) {
+    if (re.test(t)) return nome
+  }
+
   if (t && !ehTituloGenerico(t)) return t
   const m = manga.trim()
   if (!m) return t || 'Camisa'
@@ -232,6 +310,14 @@ function interpretarDocx(tabelas: string[][][], paragrafos: string[]): FichaLida
     // título da grade: linha de célula única antes dos dados
     const titulo =
       tbl.slice(0, Math.max(inicioDados, 1)).map((l) => l.filter(Boolean).join(' ')).find(ehTituloModelagem) ?? ''
+    // tecido declarado dentro da própria tabela (o shorts costuma ser de
+    // outro tecido que a camisa); vazio = herda o tecido geral da ficha
+    const tecidoDaTabela =
+      tbl
+        .slice(0, Math.max(inicioDados, 1))
+        .flat()
+        .map(tecidoDeTexto)
+        .find(Boolean) ?? ''
     // posição das colunas masculina/feminina na linha de cabeçalho
     const cab = idxCab === -1 ? [] : tbl[idxCab]
     const colMasc = cab.findIndex((c) => /^MASCULIN/i.test(c))
@@ -257,7 +343,7 @@ function interpretarDocx(tabelas: string[][][], paragrafos: string[]): FichaLida
       }
     }
     if (Object.keys(grade).length === 0) continue
-    lidas.push({ titulo, grade })
+    lidas.push({ titulo, grade, tecido: tecidoDaTabela })
   }
 
   montarModelagens(ficha, lidas, totaisDeclarados, totalGeral)
@@ -374,6 +460,7 @@ function interpretarPdf(itens: Item[]): FichaLida {
   interface Bloco {
     titulo: string
     grade: Grade
+    tecido: string
     xMasc: number
     xFem: number
   }
@@ -384,14 +471,22 @@ function interpretarPdf(itens: Item[]): FichaLida {
     const textoLinha = linha.map((x) => x.texto).join(' ').trim()
     // título de modelagem sozinho na linha inicia um novo bloco
     if (linha.length === 1 && ehTituloModelagem(textoLinha) && !CAMPOS.some(([r]) => r.test(textoLinha))) {
-      atual = { titulo: textoLinha, grade: {}, xMasc: Number.NaN, xFem: Number.NaN }
+      atual = { titulo: textoLinha, grade: {}, tecido: '', xMasc: Number.NaN, xFem: Number.NaN }
       blocosGrade.push(atual)
       continue
+    }
+    // "TECIDO: X" dentro do bloco vale só para aquela modelagem
+    if (atual && !atual.tecido) {
+      const t = tecidoDeTexto(textoLinha)
+      if (t) {
+        atual.tecido = t
+        continue
+      }
     }
     // grade sem título próprio (ex.: tabela INFANTIL): abre um bloco implícito,
     // que depois é somado à modelagem de mesmo nome
     if (!atual && linha.some((it, i) => ehTamanho(it.texto) && ehNumero(linha[i + 1]?.texto ?? ''))) {
-      atual = { titulo: '', grade: {}, xMasc: Number.NaN, xFem: Number.NaN }
+      atual = { titulo: '', grade: {}, tecido: '', xMasc: Number.NaN, xFem: Number.NaN }
       blocosGrade.push(atual)
     }
     if (!atual) continue
@@ -421,7 +516,7 @@ function interpretarPdf(itens: Item[]): FichaLida {
 
   montarModelagens(
     ficha,
-    blocosGrade.map((b) => ({ titulo: b.titulo, grade: b.grade })),
+    blocosGrade.map((b) => ({ titulo: b.titulo, grade: b.grade, tecido: b.tecido })),
     totaisDeclarados,
     totalGeral,
   )

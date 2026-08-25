@@ -8,6 +8,7 @@ import { useConfig } from '../hooks/useConfig'
 import { useEtapas } from '../hooks/useEtapas'
 import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Pedido, Perda } from '../types'
+import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
 import type { TabelaExport } from '../utils/exportar'
 import { formatarData, formatarDataHora, formatarDuracao } from '../utils/tempo'
 
@@ -45,6 +46,8 @@ export default function Relatorios() {
   const [historico, setHistorico] = useState<Historico[]>([])
   const [perdas, setPerdas] = useState<Perda[]>([])
   const [metas, setMetas] = useState<Meta[]>([])
+  // grades das fichas técnicas: base da contagem de peças produzidas
+  const [fichas, setFichas] = useState<FichaContagem[]>([])
   const [carregando, setCarregando] = useState(true)
   // qual lista de pedidos está aberta (clique nos cards de indicadores)
   const [listaAberta, setListaAberta] = useState<
@@ -67,11 +70,13 @@ export default function Relatorios() {
         .from('perdas')
         .select('*, funcionario:profiles(id, nome)')
         .gte('created_at', inicio),
-    ]).then(([p, h, m, pr]) => {
+      supabase.from('fichas_tecnicas').select('pedido_id, grade'),
+    ]).then(([p, h, m, pr, fic]) => {
       setPedidos((p.data as Pedido[]) ?? [])
       setHistorico((h.data as unknown as Historico[]) ?? [])
       setMetas((m.data as Meta[]) ?? [])
       setPerdas((pr.data as Perda[]) ?? [])
+      setFichas((fic.data as FichaContagem[]) ?? [])
       setCarregando(false)
     })
   }, [periodo])
@@ -101,6 +106,16 @@ export default function Relatorios() {
       .filter((p) => p.status === 'arquivado' && p.arquivado_em && p.arquivado_em >= inicioISO)
       .sort((a, b) => b.arquivado_em!.localeCompare(a.arquivado_em!))
 
+    // Peças produzidas: soma as grades das fichas técnicas dos pedidos
+    // concluídos no período. Um pedido rende N camisas, então a contagem
+    // de pedidos não mostra o volume real de produção.
+    const porPedido = pecasPorPedido(fichas)
+    const pecasProduzidas = somarPecas(concluidos, porPedido)
+    const pecasEmAndamento = somarPecas(emAndamento, porPedido)
+    const pedidosSemFicha = concluidos.filter((p) => !porPedido.has(p.id)).length
+    const mediaPecasPorPedido =
+      concluidos.length > 0 ? Math.round(pecasProduzidas / concluidos.length) : 0
+
     // produção por etapa: PEDIDOS ÚNICOS com trabalho concluído na etapa.
     // Ir e voltar de etapa gera vários registros no histórico, mas o mesmo
     // pedido só conta uma vez — só cresce com pedidos novos.
@@ -119,6 +134,12 @@ export default function Relatorios() {
         nome: e.nome,
         cor: e.cor,
         qtd: pedidosUnicos.size,
+        // peças só nas etapas marcadas em Admin → Fluxo: etapas de espera
+        // (teste de cor, pendente de pagamento) não são produção.
+        // null = etapa não conta peças, e a coluna mostra "—"
+        pecas: e.conta_pecas
+          ? [...pedidosUnicos].reduce((a, id) => a + (porPedido.get(id) ?? 0), 0)
+          : null,
         tempoMedio: tempos.length ? tempos.reduce((a, b) => a + b, 0) / tempos.length : null,
         meta: metaEtapa,
         pctMeta: metaEtapa > 0 ? Math.round((pedidosUnicos.size / metaEtapa) * 100) : null,
@@ -187,6 +208,22 @@ export default function Relatorios() {
       ? temposCaneca.reduce((a, b) => a + b, 0) / temposCaneca.length
       : null
     const totalCanecas = tempoCanecaPorPedido.size
+
+    // ---- VOLUME DE CADA ABA no período ----
+    // Artes: pedidos da aba Criação que chegaram à última etapa do fluxo dela
+    // (arte aprovada). Conta pedidos, porque arte não tem grade de tamanhos.
+    const etapaFinalCriacao = etapasCriacao.find((e) => e.ordem >= ultimaOrdemCriacao)
+    const artesCriadas = etapaFinalCriacao
+      ? new Set(
+          historico.filter((h) => h.etapa_id === etapaFinalCriacao.id).map((h) => h.pedido_id),
+        ).size
+      : 0
+
+    // Canecas: soma a quantidade dos pedidos da aba Canecas concluídos.
+    // Caneca não tem ficha técnica, então a contagem vem do campo quantidade.
+    const canecasProduzidas = concluidos
+      .filter((p) => (p.tipo ?? 'pronto') === 'caneca')
+      .reduce((a, p) => a + (p.quantidade || 0), 0)
 
     // funcionário mais produtivo: pedido+etapa únicos (repetir a mesma etapa
     // do mesmo pedido não conta em dobro)
@@ -292,8 +329,14 @@ export default function Relatorios() {
       pctMeta,
       totalMeta,
       evolucao,
+      pecasProduzidas,
+      pecasEmAndamento,
+      artesCriadas,
+      canecasProduzidas,
+      pedidosSemFicha,
+      mediaPecasPorPedido,
     }
-  }, [pedidos, historico, metas, perdas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo])
+  }, [pedidos, historico, metas, perdas, fichas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo])
 
   const labelPeriodo = PERIODOS.find((p) => p.id === periodo)!.label
 
@@ -308,6 +351,12 @@ export default function Relatorios() {
         ['Pedidos atrasados', rel.atrasados.length],
         ['Pedidos arquivados', rel.arquivados.length],
         ['Pedidos cancelados', rel.cancelados.length],
+        ['Peças produzidas', rel.pecasProduzidas],
+        ['Peças em produção', rel.pecasEmAndamento],
+        ['Artes criadas', rel.artesCriadas],
+        ['Canecas produzidas', rel.canecasProduzidas],
+        ['Média de peças por pedido', rel.mediaPecasPorPedido],
+        ['Pedidos concluídos sem ficha técnica', rel.pedidosSemFicha],
         ['Tempo médio de produção', formatarDuracao(rel.tempoMedioProducao)],
         ['Média diária de produção', rel.mediaDiaria.toFixed(1)],
         ['Meta do período', rel.totalMeta || '—'],
@@ -323,9 +372,10 @@ export default function Relatorios() {
     },
     {
       titulo: 'Produção por Etapa',
-      colunas: ['Etapa', 'Quantidade realizada', 'Meta', 'Meta atingida', 'Tempo médio'],
+      colunas: ['Etapa', 'Peças', 'Pedidos', 'Meta', 'Meta atingida', 'Tempo médio'],
       linhas: rel.porEtapa.map((e) => [
         e.nome,
+        e.pecas ?? '—',
         e.qtd,
         e.meta || '—',
         e.pctMeta != null ? `${e.pctMeta}%` : '—',
@@ -443,7 +493,39 @@ export default function Relatorios() {
                 </span>
               </div>
             )}
+            {/* Peças produzidas: o volume real, somando as grades das fichas */}
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatCard
+                titulo="Peças produzidas"
+                valor={rel.pecasProduzidas}
+                detalhe={
+                  rel.mediaPecasPorPedido > 0
+                    ? `média de ${rel.mediaPecasPorPedido} por pedido`
+                    : 'sem ficha técnica no período'
+                }
+                cor="text-sky-400"
+              />
+              <StatCard
+                titulo="Peças em produção"
+                valor={rel.pecasEmAndamento}
+                detalhe="pedidos ainda em andamento"
+                cor="text-amber-400"
+              />
+              <StatCard
+                titulo="Artes criadas"
+                valor={rel.artesCriadas}
+                detalhe="aprovadas na aba Criação"
+                cor="text-fuchsia-400"
+              />
+              <StatCard
+                titulo="Canecas produzidas"
+                valor={rel.canecasProduzidas}
+                detalhe="concluídas na aba Canecas"
+                cor="text-orange-400"
+              />
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <StatCard
                 titulo="Perdas do período"
                 valor={rel.perdasQtd}
@@ -653,13 +735,14 @@ export default function Relatorios() {
 
             {/* Tempo médio por etapa */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <h2 className="mb-3 text-sm font-semibold">Tempo médio por etapa</h2>
+              <h2 className="mb-3 text-sm font-semibold">Produção por etapa</h2>
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
                     <th className="pb-2 font-medium">Etapa</th>
-                    <th className="pb-2 text-right font-medium">Realizadas</th>
+                    <th className="pb-2 text-right font-medium">Peças</th>
+                    <th className="pb-2 text-right font-medium">Pedidos</th>
                     <th className="pb-2 text-right font-medium">Meta</th>
                     <th className="pb-2 text-right font-medium">Tempo médio</th>
                   </tr>
@@ -671,7 +754,10 @@ export default function Relatorios() {
                         <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
                         {e.nome}
                       </td>
-                      <td className="py-2 text-right font-medium">{e.qtd}</td>
+                      <td className="py-2 text-right font-bold text-sky-400">
+                        {e.pecas ?? <span className="font-normal text-slate-700">—</span>}
+                      </td>
+                      <td className="py-2 text-right text-slate-400">{e.qtd}</td>
                       <td className="py-2 text-right">
                         {e.meta > 0 ? (
                           <span className={e.pctMeta! >= 100 ? 'font-medium text-emerald-400' : 'text-slate-300'}>

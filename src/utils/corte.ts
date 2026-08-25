@@ -38,6 +38,28 @@ export function ordenarTamanhos(tamanhos: string[]): string[] {
 export const totalDaGrade = (grade: Grade | null | undefined): number =>
   Object.values(grade ?? {}).reduce((a, b) => a + (Number(b) || 0), 0)
 
+/** Só o que precisamos de uma ficha para contar peças. */
+export type FichaContagem = Pick<FichaTecnica, 'pedido_id' | 'grade'>
+
+/**
+ * pedido.id → total de peças, somando as grades de TODAS as fichas do pedido.
+ * Um pedido pode ter várias modelagens (manga curta + manga longa, por
+ * exemplo), e cada uma tem a sua grade.
+ */
+export function pecasPorPedido(fichas: FichaContagem[]): Map<string, number> {
+  const mapa = new Map<string, number>()
+  for (const f of fichas) {
+    mapa.set(f.pedido_id, (mapa.get(f.pedido_id) ?? 0) + totalDaGrade(f.grade))
+  }
+  return mapa
+}
+
+/** Soma as peças de uma lista de pedidos, usando o mapa acima. */
+export const somarPecas = (
+  pedidos: { id: string }[],
+  porPedido: Map<string, number>,
+): number => pedidos.reduce((total, p) => total + (porPedido.get(p.id) ?? 0), 0)
+
 /** Grade em linhas ordenadas, pronta para exibir/imprimir. */
 export function gradeEmLinhas(grade: Grade | null | undefined): { tamanho: string; qtd: number }[] {
   const g = grade ?? {}

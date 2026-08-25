@@ -71,6 +71,8 @@ create table if not exists public.etapas (
   ativo boolean not null default true,
   -- fluxo da etapa: 'producao' (Pedidos), 'criacao' (Criação de arte), 'caneca' (Canecas)
   fluxo text not null default 'producao' check (fluxo in ('producao','criacao','caneca')),
+  -- true = a etapa entra nos contadores de peças produzidas (corte, costura…)
+  conta_pecas boolean not null default false,
   -- capacidade = teto (máx/dia); meta = alvo diário (0 = não definida)
   capacidade int not null default 0,
   meta int not null default 0,

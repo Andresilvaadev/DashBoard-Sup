@@ -112,7 +112,9 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
     const novas = importado.modelagens.map((m) => ({
       pedido_id: pedidoId,
       modelagem: m.modelagem,
-      tecido: importado.tecido,
+      // tecido da própria peça (shorts costuma ser diferente da camisa);
+      // sem um específico, cai no tecido geral da ficha
+      tecido: m.tecido || importado.tecido,
       gola: importado.gola,
       manga: importado.manga,
       punho: importado.punho,

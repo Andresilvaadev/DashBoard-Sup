@@ -9,23 +9,26 @@ import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Profile } from '../types'
+import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
 import { formatarDataHora, formatarDuracao, hojeISO } from '../utils/tempo'
 
 export default function Dashboard() {
   const { profile } = useAuth()
   const { pedidos } = usePedidos()
-  const { etapasAtivas } = useEtapas()
+  const { etapasAtivas, etapasDoFluxo } = useEtapas()
   const [historicoHoje, setHistoricoHoje] = useState<Historico[]>([])
   const [saidasHoje, setSaidasHoje] = useState<Historico[]>([])
   const [historicoRecente, setHistoricoRecente] = useState<Historico[]>([])
   const [metasHoje, setMetasHoje] = useState<Meta[]>([])
   const [funcionarios, setFuncionarios] = useState<Profile[]>([])
+  // grades das fichas técnicas: base da contagem de peças produzidas
+  const [fichas, setFichas] = useState<FichaContagem[]>([])
 
   const carregarExtras = async () => {
     const inicioHoje = new Date()
     inicioHoje.setHours(0, 0, 0, 0)
 
-    const [hHoje, hSaidas, hRecente, m, funcs] = await Promise.all([
+    const [hHoje, hSaidas, hRecente, m, funcs, fic] = await Promise.all([
       // só as colunas usadas nos cálculos (menos banda; histórico cresce muito)
       supabase
         .from('historico')
@@ -43,12 +46,14 @@ export default function Dashboard() {
         .limit(12),
       supabase.from('metas').select('*').eq('data', hojeISO()),
       supabase.from('profiles').select('*').eq('ativo', true),
+      supabase.from('fichas_tecnicas').select('pedido_id, grade'),
     ])
     setHistoricoHoje((hHoje.data as unknown as Historico[]) ?? [])
     setSaidasHoje((hSaidas.data as Historico[]) ?? [])
     setHistoricoRecente((hRecente.data as Historico[]) ?? [])
     setMetasHoje((m.data as Meta[]) ?? [])
     setFuncionarios((funcs.data as Profile[]) ?? [])
+    setFichas((fic.data as FichaContagem[]) ?? [])
   }
 
   useEffect(() => {
@@ -72,6 +77,15 @@ export default function Dashboard() {
     const atrasados = emAndamento.filter((p) => p.data_prevista && p.data_prevista < hoje)
 
     const concluidos = pedidos.filter((p) => p.status === 'concluido' && p.concluido_em)
+
+    // Peças produzidas: soma as grades das fichas técnicas dos pedidos
+    // concluídos. Um pedido rende N camisas, então contar pedidos não
+    // mostra o volume real de produção.
+    const porPedido = pecasPorPedido(fichas)
+    const pecasHoje = somarPecas(concluidosHoje, porPedido)
+    const pecasTotal = somarPecas(concluidos, porPedido)
+    // pedidos concluídos que ainda não têm ficha: o total sai subestimado
+    const semFicha = concluidos.filter((p) => !porPedido.has(p.id)).length
     const tempoMedioProducao =
       concluidos.length > 0
         ? concluidos.reduce(
@@ -99,6 +113,42 @@ export default function Dashboard() {
       .map((f) => ({ nome: f.nome, qtd: f.combos.size }))
       .sort((a, b) => b.qtd - a.qtd)
       .slice(0, 8)
+
+    // Peças que passaram por cada etapa HOJE — "quanto foi cortado, prensado,
+    // costurado no dia". Usa quem SAIU da etapa (trabalho terminado); na
+    // última etapa não há saída, então conta quem chegou nela.
+    // Só as etapas marcadas em Admin → Fluxo: etapas de espera não são produção.
+    const ultimaOrdemEtapa = Math.max(0, ...etapasAtivas.map((e) => e.ordem))
+    const pecasPorEtapaHoje = etapasAtivas
+      .filter((e) => e.conta_pecas)
+      .map((e) => {
+        const fonte = e.ordem >= ultimaOrdemEtapa ? historicoHoje : saidasHoje
+        const ids = new Set(fonte.filter((h) => h.etapa_id === e.id).map((h) => h.pedido_id))
+        return {
+          nome: e.nome,
+          cor: e.cor,
+          pedidos: ids.size,
+          pecas: [...ids].reduce((a, id) => a + (porPedido.get(id) ?? 0), 0),
+        }
+      })
+
+    // Artes e canecas do dia (as outras duas abas).
+    // A arte conta quando o pedido CHEGOU hoje na última etapa do fluxo de
+    // criação. Não dá para usar o marcador "arte pronta" do card: ele não
+    // guarda data, então contaria o acumulado de todos os tempos.
+    const etapasCriacao = etapasDoFluxo('criacao')
+    const finalCriacao = etapasCriacao.reduce<(typeof etapasCriacao)[number] | null>(
+      (maior, e) => (!maior || e.ordem > maior.ordem ? e : maior),
+      null,
+    )
+    const artesHoje = finalCriacao
+      ? new Set(
+          historicoHoje.filter((h) => h.etapa_id === finalCriacao.id).map((h) => h.pedido_id),
+        ).size
+      : 0
+    const canecasHoje = concluidosHoje
+      .filter((p) => (p.tipo ?? 'pronto') === 'caneca')
+      .reduce((a, p) => a + (p.quantidade || 0), 0)
 
     const metaQtd = metasHoje.find((m) => !m.etapa_id)?.quantidade ?? 0
     const pctMeta = metaQtd > 0 ? Math.round((concluidosHoje.length / metaQtd) * 100) : null
@@ -134,8 +184,15 @@ export default function Dashboard() {
       metaQtd,
       pctMeta,
       metasEtapas,
+      pecasHoje,
+      pecasTotal,
+      semFicha,
+      pecasPorEtapaHoje,
+      artesHoje,
+      canecasHoje,
     }
-  }, [pedidos, etapasAtivas, historicoHoje, saidasHoje, metasHoje])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidos, etapasAtivas, historicoHoje, saidasHoje, metasHoje, fichas])
 
   // linha do tempo: movimentações de etapa + cancelamentos, mais recentes primeiro
   const eventos = useMemo(() => {
@@ -179,6 +236,57 @@ export default function Dashboard() {
           valor={stats.atrasados}
           cor={stats.atrasados > 0 ? 'text-rose-400' : 'text-slate-300'}
         />
+        <StatCard
+          titulo="Peças produzidas hoje"
+          valor={stats.pecasHoje}
+          detalhe={`${stats.pecasTotal} no total`}
+          cor="text-sky-400"
+        />
+      </div>
+
+      {/* Sem ficha técnica a contagem sai por baixo — avisa em vez de mentir */}
+      {stats.semFicha > 0 && (
+        <p className="text-xs text-amber-400">
+          ⚠️ {stats.semFicha} pedido(s) concluído(s) sem ficha técnica — as peças deles não entram
+          na contagem.
+        </p>
+      )}
+
+      {/* Quanto foi cortado, prensado, costurado… hoje */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Peças por etapa hoje</h2>
+          <div className="flex gap-4 text-xs">
+            <span className="text-slate-500">
+              Artes prontas <span className="font-bold text-fuchsia-400">{stats.artesHoje}</span>
+            </span>
+            <span className="text-slate-500">
+              Canecas hoje <span className="font-bold text-orange-400">{stats.canecasHoje}</span>
+            </span>
+          </div>
+        </div>
+        {stats.pecasPorEtapaHoje.length === 0 && (
+          <p className="py-4 text-center text-xs text-slate-500">
+            Nenhuma etapa marcada para contar peças. Marque em Admin → Fluxo.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {stats.pecasPorEtapaHoje.map((e) => (
+            <div
+              key={e.nome}
+              className="rounded-lg border border-slate-800 bg-slate-950/40 p-3"
+              style={{ borderLeft: `3px solid ${e.cor}` }}
+            >
+              <p className="truncate text-xs text-slate-400">{e.nome}</p>
+              <p className={`mt-1 text-xl font-bold ${e.pecas > 0 ? 'text-sky-400' : 'text-slate-600'}`}>
+                {e.pecas}
+              </p>
+              <p className="text-[11px] text-slate-600">
+                {e.pedidos} {e.pedidos === 1 ? 'pedido' : 'pedidos'}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Barra de progresso da meta */}

@@ -28,6 +28,8 @@ export interface Etapa {
   palavras_chave: string[]
   ativo: boolean
   fluxo: FluxoEtapa
+  /** true = etapa entra nos contadores de peças produzidas (corte, costura…) */
+  conta_pecas: boolean
   /** capacidade (teto) da etapa em peças/dia (0 = não definida) */
   capacidade: number
   /** meta (alvo) diária da etapa em peças/dia (0 = não definida) */

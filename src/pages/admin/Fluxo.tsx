@@ -16,6 +16,8 @@ export default function Fluxo() {
   const [nome, setNome] = useState('')
   const [cor, setCor] = useState('#ec1c24')
   const [palavras, setPalavras] = useState('')
+  /** etapa entra nos contadores de peças produzidas */
+  const [contaPecas, setContaPecas] = useState(false)
 
   // lista mostrada: só as etapas do fluxo selecionado
   const etapas = todasEtapas.filter((e) => (e.fluxo ?? 'producao') === fluxo)
@@ -26,10 +28,12 @@ export default function Fluxo() {
       setNome('')
       setCor('#ec1c24')
       setPalavras('')
+      setContaPecas(false)
     } else {
       setNome(e.nome)
       setCor(e.cor)
       setPalavras(e.palavras_chave.join(', '))
+      setContaPecas(e.conta_pecas ?? false)
     }
   }
 
@@ -44,9 +48,12 @@ export default function Fluxo() {
       const maxOrdem = Math.max(0, ...etapas.map((e) => e.ordem))
       ;({ error } = await supabase
         .from('etapas')
-        .insert({ nome, cor, palavras_chave, ordem: maxOrdem + 1, fluxo }))
+        .insert({ nome, cor, palavras_chave, ordem: maxOrdem + 1, fluxo, conta_pecas: contaPecas }))
     } else if (editando) {
-      ;({ error } = await supabase.from('etapas').update({ nome, cor, palavras_chave }).eq('id', editando.id))
+      ;({ error } = await supabase
+        .from('etapas')
+        .update({ nome, cor, palavras_chave, conta_pecas: contaPecas })
+        .eq('id', editando.id))
     }
     if (error) toast(error.message, 'erro')
     else {
@@ -164,6 +171,14 @@ export default function Fluxo() {
               <p className="font-medium">
                 {e.nome}
                 {!e.ativo && <span className="ml-2 text-xs text-slate-500">(desativada)</span>}
+                {e.conta_pecas && (
+                  <span
+                    title="Esta etapa entra nos contadores de peças produzidas"
+                    className="ml-2 rounded-full bg-sky-900 px-2 py-0.5 text-[10px] font-semibold text-sky-300"
+                  >
+                    conta peças
+                  </span>
+                )}
               </p>
               <p className="truncate text-xs text-slate-500">
                 Voz: {e.palavras_chave.join(', ') || 'sem palavras-chave'}
@@ -216,6 +231,22 @@ export default function Fluxo() {
                   className={inputCls}
                 />
               </div>
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-700 bg-slate-950 p-3">
+                <input
+                  type="checkbox"
+                  checked={contaPecas}
+                  onChange={(e) => setContaPecas(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-red-600"
+                />
+                <span>
+                  <span className="text-sm font-medium text-slate-200">Contar peças nesta etapa</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    Marque nas etapas de produção (corte, impressão, prensagem, costura,
+                    embalagem). Etapas de espera, como teste de cor ou pendente de pagamento,
+                    devem ficar desmarcadas para não inflar os contadores.
+                  </span>
+                </span>
+              </label>
             </div>
             <div className="mt-5 flex gap-3">
               <button
