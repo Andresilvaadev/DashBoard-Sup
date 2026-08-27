@@ -43,6 +43,8 @@ export interface Pedido {
   /** Código de acesso ao Portal — o cliente usa este código para consultar o pedido */
   cpf: string | null
   descricao: string
+  /** problemas encontrados na produção (falta de peça, troca, avaria) */
+  ocorrencias: string
   quantidade: number
   prioridade: Prioridade
   status: StatusPedido

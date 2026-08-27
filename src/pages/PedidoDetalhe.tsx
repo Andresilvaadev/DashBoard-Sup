@@ -40,6 +40,11 @@ export default function PedidoDetalhe() {
   /** path da foto sendo baixada no momento */
   const [baixandoFoto, setBaixandoFoto] = useState<string | null>(null)
   const [descricaoVisivel, setDescricaoVisivel] = useState(true)
+  // ocorrências: escritas aqui, porque o problema aparece durante a produção
+  const [ocorrenciaVisivel, setOcorrenciaVisivel] = useState(true)
+  const [editandoOcorrencia, setEditandoOcorrencia] = useState(false)
+  const [textoOcorrencia, setTextoOcorrencia] = useState('')
+  const [salvandoOcorrencia, setSalvandoOcorrencia] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const carregar = async () => {
@@ -292,6 +297,24 @@ export default function PedidoDetalhe() {
     const cheia = await urlAnexo(a.path)
     if (!cheia) return
     setImagemAberta((atual) => (atual?.path === a.path ? { ...atual, url: cheia } : atual))
+  }
+
+  /** Grava a ocorrência do pedido (aviso de problema na produção). */
+  const salvarOcorrencia = async () => {
+    if (!pedido) return
+    setSalvandoOcorrencia(true)
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ ocorrencias: textoOcorrencia.trim() })
+      .eq('id', pedido.id)
+    setSalvandoOcorrencia(false)
+    if (error) {
+      toast(error.message, 'erro')
+      return
+    }
+    setEditandoOcorrencia(false)
+    toast(textoOcorrencia.trim() ? 'Ocorrência registrada.' : 'Ocorrência removida.', 'sucesso')
+    carregar()
   }
 
   /** Baixa a foto no arquivo original (sem a redução aplicada na miniatura). */
@@ -593,6 +616,89 @@ export default function PedidoDetalhe() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Ocorrências: mesmo formato da Descrição, em vermelho. Escrita aqui
+          mesmo, porque o problema aparece durante a produção — não na hora
+          de cadastrar o pedido. */}
+      {(pedido.ocorrencias || podeGerenciar) && (
+        <div className="rounded-xl border border-l-4 border-slate-800 border-l-rose-500 bg-slate-900 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={() => setOcorrenciaVisivel((v) => !v)}
+              className="flex flex-1 items-center gap-2 text-left"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-rose-400">
+                Ocorrências
+              </p>
+              {pedido.ocorrencias && (
+                <span
+                  className={`text-xs text-slate-500 transition-transform duration-300 ${
+                    ocorrenciaVisivel ? 'rotate-0' : '-rotate-90'
+                  }`}
+                >
+                  ▼
+                </span>
+              )}
+            </button>
+            {podeGerenciar && !editandoOcorrencia && (
+              <button
+                onClick={() => {
+                  setTextoOcorrencia(pedido.ocorrencias ?? '')
+                  setEditandoOcorrencia(true)
+                  setOcorrenciaVisivel(true)
+                }}
+                className="shrink-0 text-xs text-slate-500 hover:text-rose-400"
+              >
+                {pedido.ocorrencias ? 'Editar' : '+ Registrar'}
+              </button>
+            )}
+          </div>
+
+          {editandoOcorrencia ? (
+            <div className="mt-2">
+              <textarea
+                autoFocus
+                rows={3}
+                value={textoOcorrencia}
+                onChange={(e) => setTextoOcorrencia(e.target.value)}
+                placeholder="ex.: está faltando 1 uniforme tamanho M"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm leading-relaxed outline-none focus:border-rose-500"
+              />
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={() => void salvarOcorrencia()}
+                  disabled={salvandoOcorrencia}
+                  className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
+                >
+                  {salvandoOcorrencia ? 'Salvando…' : 'Salvar'}
+                </button>
+                <button
+                  onClick={() => setEditandoOcorrencia(false)}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : pedido.ocorrencias ? (
+            <div
+              className={`grid transition-all duration-300 ease-in-out ${
+                ocorrenciaVisivel ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+              }`}
+            >
+              <div className="overflow-hidden">
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-rose-200">
+                  {pedido.ocorrencias}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-600">
+              Sem ocorrências. Registre aqui se faltar peça, houver troca ou avaria.
+            </p>
+          )}
         </div>
       )}
 

@@ -286,6 +286,18 @@ export default memo(function KanbanBoard({
                             : (rotulosArte?.pendente ?? '○ Marcar como concluído')}
                         </button>
                       )}
+                      {/* Ocorrência: aviso de problema, em linha própria para
+                          não se perder no meio das etiquetas */}
+                      {p.ocorrencias && (
+                        <p
+                          title={p.ocorrencias}
+                          className="mt-2 flex items-start gap-1 rounded-md bg-rose-950/60 px-2 py-1 text-[11px] leading-snug text-rose-200"
+                        >
+                          <span className="shrink-0">⚠</span>
+                          <span className="line-clamp-2">{p.ocorrencias}</span>
+                        </p>
+                      )}
+
                       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
                         {atrasado && (
                           <span className="rounded-full bg-rose-900 px-2 py-0.5 font-semibold text-rose-300">

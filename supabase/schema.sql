@@ -118,6 +118,8 @@ create table if not exists public.pedidos (
   numero int not null unique,
   cliente text not null default '',
   descricao text not null default '',
+  -- problemas encontrados na produção (falta de peça, troca, avaria)
+  ocorrencias text not null default '',
   quantidade int not null default 1,
   prioridade text not null default 'normal' check (prioridade in ('baixa','normal','alta','urgente')),
   status text not null default 'em_andamento' check (status in ('em_andamento','concluido','cancelado','arquivado')),
