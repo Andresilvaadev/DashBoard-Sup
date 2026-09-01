@@ -144,6 +144,9 @@ create table if not exists public.pedidos (
   descricao text not null default '',
   -- problemas encontrados na produção (falta de peça, troca, avaria)
   ocorrencias text not null default '',
+  -- itens do kit e suas quantidades: {"camisa": 30, "caneca": 30}
+  -- objeto vazio = pedido comum (não é kit)
+  kit jsonb not null default '{}'::jsonb,
   quantidade int not null default 1,
   prioridade text not null default 'normal' check (prioridade in ('baixa','normal','alta','urgente')),
   status text not null default 'em_andamento' check (status in ('em_andamento','concluido','cancelado','arquivado')),

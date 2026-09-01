@@ -13,6 +13,7 @@ import { ABAS, abaDoTipo, fluxoDoTipo, rotulosConclusao, type Aba } from '../lib
 import { enviarAnexo, urlAnexo, urlsAnexos } from '../lib/anexos'
 import { pedidosQuePassaramNaFrente } from '../utils/fila'
 import { comprimirImagem } from '../utils/imagem'
+import { ehKit, itensDoKit, totalKit } from '../lib/kit'
 import { removerAnexosStorage } from '../utils/storage'
 import { formatarData, formatarDataHora, formatarDuracao, segundosDesde } from '../utils/tempo'
 
@@ -621,6 +622,28 @@ export default function PedidoDetalhe() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Kit: os itens só existem no pedido de kit, e é a informação que
+          diz o que precisa ser produzido — sem ela a quantidade total não
+          conta a história. */}
+      {ehKit(pedido.kit) && (
+        <div className="rounded-xl border border-l-4 border-slate-800 border-l-sky-500 bg-slate-900 p-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">
+              Itens do kit
+            </p>
+            <span className="text-xs text-slate-500">{totalKit(pedido.kit)} peças no total</span>
+          </div>
+          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+            {itensDoKit(pedido.kit).map((i) => (
+              <li key={i.id} className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="text-slate-300">{i.rotulo}</span>
+                <span className="font-semibold text-slate-100">{i.quantidade}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

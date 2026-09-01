@@ -11,6 +11,15 @@ export type TipoPedido = 'pronto' | 'criacao' | 'caneca'
 /** fluxo de etapas: produção (Pedidos), criação (arte), caneca (Canecas) */
 export type FluxoEtapa = 'producao' | 'criacao' | 'caneca'
 
+/** Itens que podem compor um kit */
+export type ItemKit = 'camisa' | 'caneca' | 'tirante' | 'ecobag' | 'sacolinha' | 'pulseira'
+
+/**
+ * Kit: quantidade de cada item marcado — { camisa: 30, caneca: 30 }.
+ * Só entram os itens marcados; objeto vazio = pedido comum.
+ */
+export type Kit = Partial<Record<ItemKit, number>>
+
 export interface Profile {
   id: string
   nome: string
@@ -45,6 +54,8 @@ export interface Pedido {
   descricao: string
   /** problemas encontrados na produção (falta de peça, troca, avaria) */
   ocorrencias: string
+  /** itens do kit e suas quantidades; {} = pedido comum */
+  kit: Kit
   quantidade: number
   prioridade: Prioridade
   status: StatusPedido

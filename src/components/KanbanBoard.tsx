@@ -4,6 +4,7 @@ import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import { ABAS, type Aba } from '../lib/abas'
 import type { Etapa, Pedido } from '../types'
+import { ehKit, resumoKit } from '../lib/kit'
 import { formatarData, hojeISO } from '../utils/tempo'
 
 const prioridadeBorda: Record<string, string> = {
@@ -306,6 +307,14 @@ export default memo(function KanbanBoard({
                       )}
 
                       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                        {ehKit(p.kit) && (
+                          <span
+                            title={resumoKit(p.kit)}
+                            className="rounded-full bg-sky-900 px-2 py-0.5 font-semibold text-sky-300"
+                          >
+                            Kit
+                          </span>
+                        )}
                         {atrasado && (
                           <span className="rounded-full bg-rose-900 px-2 py-0.5 font-semibold text-rose-300">
                             Atrasado

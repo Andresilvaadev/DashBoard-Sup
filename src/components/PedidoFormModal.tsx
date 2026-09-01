@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../contexts/ToastContext'
-import type { Pedido, Prioridade, StatusPedido, TipoPedido } from '../types'
+import type { ItemKit, Kit, Pedido, Prioridade, StatusPedido, TipoPedido } from '../types'
+import { ITENS_KIT, ehKit, totalKit } from '../lib/kit'
 import { enviarAnexo } from '../lib/anexos'
 import { comprimirImagem } from '../utils/imagem'
 
@@ -38,6 +39,21 @@ export default function PedidoFormModal({
   const [codigoAcesso, setCodigoAcesso] = useState(pedido?.cpf ?? gerarCodigo())
   const [descricao, setDescricao] = useState(pedido?.descricao ?? '')
   const [quantidade, setQuantidade] = useState(pedido?.quantidade?.toString() ?? '1')
+  // Categoria do pedido: um kit junta itens variados (camisa, caneca,
+  // tirante…), cada um com a sua quantidade, no lugar de uma quantidade só.
+  const [categoria, setCategoria] = useState<'uniforme' | 'kit'>(
+    ehKit(pedido?.kit) ? 'kit' : 'uniforme',
+  )
+  // A quantidade fica como texto para o campo poder ficar vazio enquanto a
+  // pessoa digita; a chave existir = item marcado.
+  const [kitForm, setKitForm] = useState<Partial<Record<ItemKit, string>>>(() => {
+    const inicial: Partial<Record<ItemKit, string>> = {}
+    for (const { id } of ITENS_KIT) {
+      const qtd = pedido?.kit?.[id]
+      if (qtd && qtd > 0) inicial[id] = String(qtd)
+    }
+    return inicial
+  })
   const [prioridade, setPrioridade] = useState<Prioridade>(pedido?.prioridade ?? 'normal')
   // aba do pedido: ao editar mantém a atual; ao criar, herda a aba de origem
   const tipo: TipoPedido = pedido?.tipo ?? tipoNovo
@@ -71,6 +87,29 @@ export default function PedidoFormModal({
       for (const u of Object.values(urls)) URL.revokeObjectURL(u)
     }
   }, [arquivos])
+
+  /** Marca/desmarca um item do kit. Marcar abre o campo de quantidade ao lado. */
+  const alternarItemKit = (id: ItemKit) => {
+    setKitForm((atual) => {
+      const novo = { ...atual }
+      if (id in novo) delete novo[id]
+      else novo[id] = ''
+      return novo
+    })
+  }
+
+  /** Estado do formulário → o objeto que vai para o banco, só com o que tem quantidade */
+  const montarKit = (): Kit => {
+    const kit: Kit = {}
+    for (const { id } of ITENS_KIT) {
+      const qtd = parseInt(kitForm[id] ?? '', 10)
+      if (qtd > 0) kit[id] = qtd
+    }
+    return kit
+  }
+
+  const kitAtual = montarKit()
+  const totalPecasKit = totalKit(kitAtual)
 
   const adicionarArquivos = (lista: FileList | null) => {
     if (!lista || lista.length === 0) return
@@ -119,6 +158,17 @@ export default function PedidoFormModal({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+
+    // No kit, a quantidade do pedido é a soma dos itens — não faz sentido
+    // um kit sem nenhum item marcado.
+    const kit = categoria === 'kit' ? kitAtual : {}
+    if (categoria === 'kit' && totalKit(kit) === 0) {
+      toast('Marque ao menos um item do kit e informe a quantidade.', 'erro')
+      return
+    }
+    const qtdFinal =
+      categoria === 'kit' ? totalKit(kit) : parseInt(quantidade, 10) || 1
+
     setSalvando(true)
     const num = parseInt(numero, 10)
     let error
@@ -134,7 +184,8 @@ export default function PedidoFormModal({
           cliente,
           cpf: codigoAcesso || null,
           descricao,
-          quantidade: parseInt(quantidade, 10) || 1,
+          quantidade: qtdFinal,
+          kit,
           prioridade,
           tipo,
           status,
@@ -154,11 +205,12 @@ export default function PedidoFormModal({
         p_numero: null,
         p_cliente: cliente,
         p_descricao: descricao,
-        p_quantidade: parseInt(quantidade, 10) || 1,
+        p_quantidade: qtdFinal,
         p_prioridade: prioridade,
         p_data_prevista: dataPrevista || null,
         p_tipo: tipo,
         p_cpf: codigoAcesso || null,
+        p_kit: kit,
       })
       error = res.error
       pedidoId = typeof res.data === 'string' && res.data ? res.data : null
@@ -203,7 +255,35 @@ export default function PedidoFormModal({
       >
         <h2 className="text-lg font-bold">{editando ? `Editar pedido ${pedido?.numero}` : 'Novo pedido'}</h2>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        {/* Categoria: pedido comum (uniformes/camisas) ou kit, que junta
+            itens variados com uma quantidade cada. Só na criação — trocar a
+            categoria de um pedido já em produção mudaria no meio do caminho
+            o que a fábrica está fazendo. */}
+        {!editando && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {(
+              [
+                ['uniforme', 'Uniformes / Camisas'],
+                ['kit', 'Kit'],
+              ] as const
+            ).map(([valor, rotulo]) => (
+              <button
+                key={valor}
+                type="button"
+                onClick={() => setCategoria(valor)}
+                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                  categoria === valor
+                    ? 'border-red-500 bg-red-600/15 text-red-300'
+                    : 'border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                }`}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className={`mt-4 gap-3 ${categoria === 'kit' ? '' : 'grid grid-cols-2'}`}>
           <div>
             <label className="text-xs font-medium text-slate-400">
               Nº OS{editando ? ' *' : ''}
@@ -226,17 +306,62 @@ export default function PedidoFormModal({
               </div>
             )}
           </div>
-          <div>
-            <label className="text-xs font-medium text-slate-400">Quantidade</label>
-            <input
-              type="number"
-              min={1}
-              value={quantidade}
-              onChange={(e) => setQuantidade(e.target.value)}
-              className={inputCls}
-            />
-          </div>
+          {/* No kit a quantidade sai da soma dos itens, então o campo solto some */}
+          {categoria !== 'kit' && (
+            <div>
+              <label className="text-xs font-medium text-slate-400">Quantidade</label>
+              <input
+                type="number"
+                min={1}
+                value={quantidade}
+                onChange={(e) => setQuantidade(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+          )}
         </div>
+
+        {/* Itens do kit: marcar abre o campo de quantidade ao lado */}
+        {categoria === 'kit' && (
+          <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60 p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <label className="text-xs font-medium text-slate-400">Itens do kit *</label>
+              <span className="text-xs text-slate-500">
+                {totalPecasKit > 0 ? `${totalPecasKit} peças no total` : 'nenhum item marcado'}
+              </span>
+            </div>
+            <div className="mt-2 space-y-1">
+              {ITENS_KIT.map(({ id, rotulo }) => {
+                const marcado = id in kitForm
+                return (
+                  <div key={id} className="flex items-center gap-2">
+                    <label className="flex flex-1 cursor-pointer select-none items-center gap-2 py-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={marcado}
+                        onChange={() => alternarItemKit(id)}
+                        className="h-4 w-4 accent-red-500"
+                      />
+                      {rotulo}
+                    </label>
+                    {marcado && (
+                      <input
+                        type="number"
+                        required
+                        min={1}
+                        value={kitForm[id] ?? ''}
+                        onChange={(e) => setKitForm((atual) => ({ ...atual, [id]: e.target.value }))}
+                        placeholder="Qtd"
+                        aria-label={`Quantidade de ${rotulo.toLowerCase()}`}
+                        className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-right text-sm outline-none focus:border-red-500"
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="mt-3">
           <label className="text-xs font-medium text-slate-400">Cliente *</label>
