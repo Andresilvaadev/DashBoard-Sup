@@ -246,10 +246,10 @@ export default memo(function KanbanBoard({
                       onPointerCancel={cancelarPressao}
                       // pedido com ocorrência fica de borda vermelha: o
                       // problema tem que saltar aos olhos no quadro inteiro
-                      className={`group cursor-grab select-none overflow-hidden rounded-lg border bg-slate-900 p-3 shadow-sm transition-colors [-webkit-touch-callout:none] active:cursor-grabbing ${
+                      className={`group cursor-grab select-none overflow-hidden rounded-lg bg-slate-900 p-3 shadow-sm transition-colors [-webkit-touch-callout:none] active:cursor-grabbing ${
                         p.ocorrencias
-                          ? 'border-rose-500 hover:border-rose-400'
-                          : 'border-slate-800 hover:border-slate-600'
+                          ? 'border-2 border-rose-500 hover:border-rose-400'
+                          : 'border border-slate-800 hover:border-slate-600'
                       } ${prioridadeBorda[p.prioridade]} ${
                         movendo === p.numero ? 'opacity-40' : ''
                       } ${
