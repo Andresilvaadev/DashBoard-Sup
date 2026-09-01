@@ -244,9 +244,15 @@ export default memo(function KanbanBoard({
                       onPointerMove={aoMoverNoCard}
                       onPointerUp={cancelarPressao}
                       onPointerCancel={cancelarPressao}
-                      className={`group cursor-grab select-none overflow-hidden rounded-lg border border-slate-800 bg-slate-900 p-3 shadow-sm transition-colors [-webkit-touch-callout:none] hover:border-slate-600 active:cursor-grabbing ${
-                        prioridadeBorda[p.prioridade]
-                      } ${movendo === p.numero ? 'opacity-40' : ''} ${
+                      // pedido com ocorrência fica de borda vermelha: o
+                      // problema tem que saltar aos olhos no quadro inteiro
+                      className={`group cursor-grab select-none overflow-hidden rounded-lg border bg-slate-900 p-3 shadow-sm transition-colors [-webkit-touch-callout:none] active:cursor-grabbing ${
+                        p.ocorrencias
+                          ? 'border-rose-500 hover:border-rose-400'
+                          : 'border-slate-800 hover:border-slate-600'
+                      } ${prioridadeBorda[p.prioridade]} ${
+                        movendo === p.numero ? 'opacity-40' : ''
+                      } ${
                         arraste?.pedido.id === p.id ? 'opacity-30 ring-2 ring-red-500' : ''
                       }`}
                     >
@@ -263,12 +269,13 @@ export default memo(function KanbanBoard({
                         </Link>
                       )}
                       {/* nº da OS e cliente: texto corrido, então o nome quebra
-                          em mais linhas em vez de ser cortado */}
+                          em mais linhas em vez de ser cortado. O nome sai no
+                          mesmo tamanho e peso da OS — só a cor os separa. */}
                       <Link to={`/pedidos/${p.numero}`} className="block leading-snug">
                         <span className="mr-1.5 font-bold text-red-400 hover:underline">
                           #{p.numero}
                         </span>
-                        <span className="text-xs font-medium text-slate-300">{p.cliente}</span>
+                        <span className="font-bold text-slate-300">{p.cliente}</span>
                       </Link>
                       {/* Ação principal do card: discreta, mas em linha própria */}
                       {onMarcarArte && (
