@@ -636,11 +636,18 @@ export default function PedidoDetalhe() {
             </p>
             <span className="text-xs text-slate-500">{totalKit(pedido.kit)} peças no total</span>
           </div>
-          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+          {/* Etiquetas em vez de colunas: numa grade o número ia parar na
+              outra ponta da coluna, longe do nome do item. */}
+          <ul className="mt-2 flex flex-wrap gap-2">
             {itensDoKit(pedido.kit).map((i) => (
-              <li key={i.id} className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="text-slate-300">{i.rotulo}</span>
-                <span className="font-semibold text-slate-100">{i.quantidade}</span>
+              <li
+                key={i.id}
+                className="flex items-baseline gap-1.5 rounded-lg bg-slate-800/70 px-2.5 py-1 text-sm"
+              >
+                <span className="font-bold text-sky-300">{i.quantidade}</span>
+                <span className="text-slate-300">
+                  {i.quantidade === 1 ? i.rotulo.toLowerCase() : i.plural}
+                </span>
               </li>
             ))}
           </ul>
