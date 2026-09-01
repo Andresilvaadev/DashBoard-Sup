@@ -594,6 +594,37 @@ export default function PedidoDetalhe() {
       </div>
       )}
 
+      {/* Kit: vem ANTES da descrição e com mais peso visual porque é a
+          informação que diz o que precisa ser produzido — quem abre o
+          pedido tem que bater o olho e já saber o que montar. */}
+      {ehKit(pedido.kit) && (
+        <div className="rounded-xl border-2 border-sky-600/70 bg-sky-950/40 p-4 shadow-lg shadow-sky-950/50">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-sky-300">
+              <span aria-hidden>📦</span> Itens do kit
+            </p>
+            <span className="rounded-full bg-sky-900/80 px-3 py-1 text-xs font-bold text-sky-100">
+              {totalKit(pedido.kit)} peças no total
+            </span>
+          </div>
+          {/* Etiquetas em vez de colunas: numa grade o número ia parar na
+              outra ponta da coluna, longe do nome do item. */}
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {itensDoKit(pedido.kit).map((i) => (
+              <li
+                key={i.id}
+                className="flex items-baseline gap-2 rounded-lg border border-sky-700/60 bg-sky-900/40 px-3 py-2"
+              >
+                <span className="text-xl font-bold leading-none text-sky-200">{i.quantidade}</span>
+                <span className="text-sm font-medium text-sky-100/90">
+                  {i.quantidade === 1 ? i.rotulo.toLowerCase() : i.plural}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Descrição em destaque (o que o pedido pede) — recolhível */}
       {pedido.descricao && (
         <div className="rounded-xl border border-l-4 border-slate-800 border-l-amber-500 bg-slate-900 p-4">
@@ -622,35 +653,6 @@ export default function PedidoDetalhe() {
               </p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Kit: os itens só existem no pedido de kit, e é a informação que
-          diz o que precisa ser produzido — sem ela a quantidade total não
-          conta a história. */}
-      {ehKit(pedido.kit) && (
-        <div className="rounded-xl border border-l-4 border-slate-800 border-l-sky-500 bg-slate-900 p-4">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">
-              Itens do kit
-            </p>
-            <span className="text-xs text-slate-500">{totalKit(pedido.kit)} peças no total</span>
-          </div>
-          {/* Etiquetas em vez de colunas: numa grade o número ia parar na
-              outra ponta da coluna, longe do nome do item. */}
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {itensDoKit(pedido.kit).map((i) => (
-              <li
-                key={i.id}
-                className="flex items-baseline gap-1.5 rounded-lg bg-slate-800/70 px-2.5 py-1 text-sm"
-              >
-                <span className="font-bold text-sky-300">{i.quantidade}</span>
-                <span className="text-slate-300">
-                  {i.quantidade === 1 ? i.rotulo.toLowerCase() : i.plural}
-                </span>
-              </li>
-            ))}
-          </ul>
         </div>
       )}
 
