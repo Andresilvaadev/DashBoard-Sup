@@ -601,7 +601,22 @@ export default function PedidoDetalhe() {
         <div className="rounded-xl border-2 border-sky-600/70 bg-sky-950/40 p-4 shadow-lg shadow-sky-950/50">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-sky-300">
-              <span aria-hidden>📦</span> Itens do kit
+              {/* caixa fechada, no mesmo traço dos outros ícones do site */}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+                className="h-4 w-4 shrink-0"
+              >
+                <path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z" />
+                <path d="m3.3 7 8.7 5 8.7-5" />
+                <path d="M12 22V12" />
+              </svg>
+              Itens do kit
             </p>
             <span className="rounded-full bg-sky-900/80 px-3 py-1 text-xs font-bold text-sky-100">
               {totalKit(pedido.kit)} peças no total
