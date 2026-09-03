@@ -10,7 +10,7 @@ import { urlsAnexos } from '../lib/anexos'
 import { supabase } from '../lib/supabase'
 import type { Anexo, FichaTecnica, LoteCorte, PartesCorte } from '../types'
 import {
-  agruparPorModelagem,
+  agruparParaCorte,
   especificacoesDoGrupo,
   gradeEmLinhas,
   observacoesDoGrupo,
@@ -78,7 +78,7 @@ export default function MapaCorte() {
         return
       }
       const fichas = (data as unknown as FichaTecnica[]) ?? []
-      const gs = agruparPorModelagem(fichas)
+      const gs = agruparParaCorte(fichas)
       setGrupos(gs)
 
       const idsLayout = gs.map((g) => g.layoutAnexoId).filter(Boolean) as string[]
@@ -289,7 +289,7 @@ export default function MapaCorte() {
     let feitos = 0
     let total = 0
     for (const g of grupos) {
-      const chave = g.modelagem.toUpperCase()
+      const chave = g.chave
       for (const l of gradeEmLinhas(g.grade)) {
         total++
         if (tamanhoCortado(lote.progresso?.[chave]?.[l.tamanho])) feitos++
@@ -486,7 +486,7 @@ export default function MapaCorte() {
             </div>
 
             {grupos.map((g) => {
-              const chave = g.modelagem.toUpperCase()
+              const chave = g.chave
               const linhas = gradeEmLinhas(g.grade)
               const feitosDoGrupo = linhas.filter((l) =>
                 tamanhoCortado(lote?.progresso?.[chave]?.[l.tamanho]),
@@ -505,6 +505,14 @@ export default function MapaCorte() {
                           }`}
                         >
                           {feitosDoGrupo}/{linhas.length} cortados
+                        </span>
+                      )}
+                      {g.totalMangaLonga > 0 && (
+                        <span
+                          title="Do total, quantas peças levam manga longa"
+                          className="rounded-full bg-amber-900 px-3 py-1 text-sm font-semibold text-amber-300"
+                        >
+                          {g.totalMangaLonga} manga longa
                         </span>
                       )}
                       <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-semibold text-emerald-400">
@@ -576,6 +584,12 @@ export default function MapaCorte() {
                           <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
                             <th className="pb-2 font-medium">Tamanho</th>
                             <th className="pb-2 text-right font-medium">Pares</th>
+                            {/* só aparece quando há manga longa no grupo: o corpo
+                                é o mesmo, o que muda é quantas mangas compridas
+                                sair */}
+                            {g.totalMangaLonga > 0 && (
+                              <th className="pb-2 text-right font-medium">Manga longa</th>
+                            )}
                             {lote && <th className="pb-2 text-right font-medium">Camisas / Mangas</th>}
                           </tr>
                         </thead>
@@ -592,6 +606,17 @@ export default function MapaCorte() {
                                   {l.tamanho}
                                 </td>
                                 <td className="py-1.5 text-right text-slate-300">{l.qtd}</td>
+                                {g.totalMangaLonga > 0 && (
+                                  <td className="py-1.5 text-right">
+                                    {g.mangaLonga[l.tamanho] ? (
+                                      <span className="font-semibold text-amber-400">
+                                        {g.mangaLonga[l.tamanho]}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-700">—</span>
+                                    )}
+                                  </td>
+                                )}
                                 {lote && (
                                   <td className="py-1.5">
                                     {/* o tamanho só fica pronto com as duas partes cortadas */}
@@ -622,6 +647,16 @@ export default function MapaCorte() {
                             )
                           })}
                         </tbody>
+                        <tfoot>
+                          <tr className="border-t border-slate-700 text-sm font-bold">
+                            <td className="pt-2">Total</td>
+                            <td className="pt-2 text-right text-emerald-400">{g.total}</td>
+                            {g.totalMangaLonga > 0 && (
+                              <td className="pt-2 text-right text-amber-400">{g.totalMangaLonga}</td>
+                            )}
+                            {lote && <td />}
+                          </tr>
+                        </tfoot>
                       </table>
 
                       <div className="mt-3 flex flex-wrap gap-1.5">

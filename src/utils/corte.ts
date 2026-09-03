@@ -70,12 +70,25 @@ export function gradeEmLinhas(grade: Grade | null | undefined): { tamanho: strin
 
 /** Uma modelagem agrupada no mapa de corte. */
 export interface GrupoCorte {
-  /** nome normalizado para exibição (ex.: "Manga Curta") */
+  /**
+   * Chave estável do grupo, usada para gravar o progresso do corte.
+   * Não muda conforme as peças que caem no lote — ao contrário do rótulo.
+   */
+  chave: string
+  /** rótulo exibido (ex.: "Gola redonda / V", "Shorts") */
   modelagem: string
-  /** grade somada de todas as fichas dessa modelagem */
+  /** grade somada de todas as fichas do grupo */
   grade: Grade
   /** total de pares */
   total: number
+  /**
+   * Quantas peças de cada tamanho são manga longa. O corpo da camisa é o
+   * mesmo, então manga curta e longa cortam juntas — mas quem corta precisa
+   * saber quantas mangas longas tirar.
+   */
+  mangaLonga: Grade
+  /** total de peças de manga longa no grupo */
+  totalMangaLonga: number
   /** fichas que compõem o grupo (para abrir a ficha completa) */
   fichas: FichaTecnica[]
   /** id do anexo de Layout de Corte da primeira ficha que tiver um */
@@ -126,7 +139,8 @@ const punhoSimNao = (v: string) => (/^(n[ãa]o|sem\b|nenhum|0|-)/i.test(v.trim()
 
 /**
  * Campos da ficha que o corte precisa conhecer, na ordem de leitura.
- * O modelo da manga fica de fora: não muda o corte.
+ * O modelo da manga fica de fora daqui porque tem coluna própria na grade
+ * (o corpo é o mesmo; muda só quantas mangas compridas sair).
  */
 const CAMPOS_CORTE: [string, keyof FichaTecnica, ((v: string) => string)?][] = [
   ['Tecido', 'tecido'],
@@ -134,6 +148,14 @@ const CAMPOS_CORTE: [string, keyof FichaTecnica, ((v: string) => string)?][] = [
   ['Punho', 'punho', punhoSimNao],
   ['Estampa', 'estampa'],
 ]
+
+/**
+ * Campos onde valores diferentes são normais e NÃO devem virar alerta.
+ * A gola é quem forma o grupo: redonda e V caem juntas de propósito, então
+ * marcá-las como divergentes seria alarme falso. Os valores continuam
+ * listados com o número do pedido, que é o que a cortadeira precisa ver.
+ */
+const CAMPOS_SEM_ALERTA = new Set<keyof FichaTecnica>(['gola'])
 
 /**
  * Especificações de corte de um grupo.
@@ -162,7 +184,7 @@ export function especificacoesDoGrupo(grupo: GrupoCorte): EspecCorte[] {
     especs.push({
       rotulo,
       valores: [...porValor.entries()].map(([valor, pedidos]) => ({ valor, pedidos })),
-      divergente: porValor.size > 1,
+      divergente: porValor.size > 1 && !CAMPOS_SEM_ALERTA.has(campo),
     })
   }
 
@@ -183,32 +205,95 @@ export function observacoesDoGrupo(grupo: GrupoCorte): { texto: string; pedidos:
   return [...porTexto.entries()].map(([texto, pedidos]) => ({ texto, pedidos }))
 }
 
-const chaveModelagem = (m: string) => m.trim().toLowerCase()
+// ------------------------------------------------------------
+// Como o corte agrupa as fichas
+//
+// Na mesa de corte o que importa é a MODELAGEM, não o pedido e não a cor:
+// fichas de pedidos diferentes com a mesma modelagem são cortadas juntas,
+// somando as grades.
+//
+// Para camisa, quem define a modelagem é a GOLA. Redonda e V são o mesmo
+// corpo — só o acabamento do pescoço muda —, então entram no mesmo grupo.
+// Polo, pesca e as demais têm corpo próprio e ficam cada uma no seu.
+//
+// A manga NÃO separa: manga curta e manga longa saem do mesmo corpo. Elas
+// somam no mesmo grupo, e o grupo guarda quantas são longas para quem corta
+// saber quantas mangas compridas tirar.
+// ------------------------------------------------------------
+
+/** Peças que não são camisa e por isso não seguem a regra da gola. */
+const PECAS_DE_BAIXO = /SHORTS?|CAL[ÇC][AÃ]O|BERMUDA/i
 
 /**
- * Agrupa as fichas por modelagem e soma as grades de tamanhos.
- * Ex.: 3 pedidos com "Manga Curta" viram um único bloco com a soma dos tamanhos.
+ * Famílias de gola, da mais específica para a mais genérica. A ordem
+ * importa: "polo" e "pesca" precisam ser testadas antes de redonda/V.
  */
-export function agruparPorModelagem(fichas: FichaTecnica[]): GrupoCorte[] {
+const FAMILIAS_GOLA: [RegExp, string][] = [
+  [/POLO/i, 'Gola polo'],
+  [/PESCA|PADRE/i, 'Gola pesca'],
+  [/OL[ÍI]MPIC/i, 'Gola olímpica'],
+  [/CARECA|REDOND|CAREC|\bGOLA\s*O\b/i, 'Gola redonda / V'],
+  [/\bV\b|DECOTE\s*V/i, 'Gola redonda / V'],
+]
+
+/** Manga longa aparece ora no campo da manga, ora no nome da modelagem. */
+const ehMangaLonga = (f: FichaTecnica): boolean =>
+  /LONGA/i.test(`${f.manga ?? ''} ${f.modelagem ?? ''}`)
+
+/**
+ * Em que grupo de corte a ficha entra.
+ * Devolve a chave (estável, usada para gravar o progresso) e o rótulo.
+ */
+export function familiaDeCorte(f: FichaTecnica): { chave: string; rotulo: string } {
+  const modelagem = String(f.modelagem ?? '').trim()
+
+  // shorts, calção e bermuda cortam juntos, venham do pedido que vierem
+  if (PECAS_DE_BAIXO.test(modelagem)) return { chave: 'BAIXO', rotulo: 'Shorts' }
+
+  const gola = String(f.gola ?? '').trim()
+  if (gola) {
+    for (const [re, rotulo] of FAMILIAS_GOLA) {
+      if (re.test(gola)) return { chave: rotulo.toUpperCase(), rotulo }
+    }
+    // gola que não conhecemos vira grupo próprio, com o nome como está na ficha
+    return { chave: `GOLA ${gola.toUpperCase()}`, rotulo: `Gola ${gola.toLowerCase()}` }
+  }
+
+  // sem gola informada não dá para saber a modelagem: mantém a peça isolada,
+  // que é o comportamento seguro — juntar errado estraga o corte
+  const nome = modelagem || 'Sem modelagem'
+  return { chave: nome.toUpperCase(), rotulo: nome }
+}
+
+/**
+ * Agrupa as fichas para o corte e soma as grades de tamanhos.
+ * Ex.: dois pedidos de gola redonda e um de gola V viram um bloco só.
+ */
+export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
   const mapa = new Map<string, GrupoCorte>()
   for (const f of fichas) {
-    const chave = chaveModelagem(f.modelagem)
+    const { chave, rotulo } = familiaDeCorte(f)
     if (!chave) continue
     const grupo =
       mapa.get(chave) ??
       ({
-        modelagem: f.modelagem.trim(),
+        chave,
+        modelagem: rotulo,
         grade: {},
         total: 0,
+        mangaLonga: {},
+        totalMangaLonga: 0,
         fichas: [],
         layoutAnexoId: null,
         semLayout: true,
       } satisfies GrupoCorte)
+    const longa = ehMangaLonga(f)
     for (const [tam, qtd] of Object.entries(f.grade ?? {})) {
       const n = Number(qtd) || 0
       if (n <= 0) continue
       const t = tam.trim().toUpperCase()
       grupo.grade[t] = (grupo.grade[t] ?? 0) + n
+      if (longa) grupo.mangaLonga[t] = (grupo.mangaLonga[t] ?? 0) + n
     }
     grupo.fichas.push(f)
     if (!grupo.layoutAnexoId && f.layout_anexo_id) {
@@ -217,6 +302,9 @@ export function agruparPorModelagem(fichas: FichaTecnica[]): GrupoCorte[] {
     }
     mapa.set(chave, grupo)
   }
-  for (const g of mapa.values()) g.total = totalDaGrade(g.grade)
+  for (const g of mapa.values()) {
+    g.total = totalDaGrade(g.grade)
+    g.totalMangaLonga = totalDaGrade(g.mangaLonga)
+  }
   return [...mapa.values()].sort((a, b) => a.modelagem.localeCompare(b.modelagem, 'pt-BR'))
 }

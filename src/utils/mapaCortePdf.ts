@@ -88,12 +88,27 @@ export async function gerarPdfMapaCorte(d: DadosMapaCorte) {
       y += linhasEspec.length * 4.5 - 3
     }
 
+    // A coluna da manga longa só entra quando o grupo tem alguma: manga curta
+    // e longa saem do mesmo corpo, então cortam juntas — o que muda é quantas
+    // mangas compridas tirar.
+    const temLonga = g.totalMangaLonga > 0
+    const linhasGrade = gradeEmLinhas(g.grade)
     autoTable(doc, {
       startY: y + 3,
-      head: [['Tamanho', 'Pares']],
-      body: gradeEmLinhas(g.grade).map((l) => [l.tamanho, String(l.qtd)]),
+      head: [temLonga ? ['Tamanho', 'Pares', 'M. longa'] : ['Tamanho', 'Pares']],
+      body: linhasGrade.map((l) =>
+        temLonga
+          ? [l.tamanho, String(l.qtd), g.mangaLonga[l.tamanho] ? String(g.mangaLonga[l.tamanho]) : '—']
+          : [l.tamanho, String(l.qtd)],
+      ),
+      foot: [
+        temLonga
+          ? ['Total', String(g.total), String(g.totalMangaLonga)]
+          : ['Total', String(g.total)],
+      ],
       styles: { fontSize: 9 },
       headStyles: { fillColor: [11, 18, 51] },
+      footStyles: { fillColor: [11, 18, 51], fontStyle: 'bold' },
       margin: { left: 14, right: larguraPagina / 2 },
       tableWidth: larguraPagina / 2 - 20,
     })
