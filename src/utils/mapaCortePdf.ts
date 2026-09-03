@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import type { Grade } from '../types'
 import type { GrupoCorte } from './corte'
 import { especificacoesDoGrupo, gradeEmLinhas } from './corte'
 
@@ -88,24 +89,23 @@ export async function gerarPdfMapaCorte(d: DadosMapaCorte) {
       y += linhasEspec.length * 4.5 - 3
     }
 
-    // A coluna da manga longa só entra quando o grupo tem alguma: manga curta
-    // e longa saem do mesmo corpo, então cortam juntas — o que muda é quantas
-    // mangas compridas tirar.
-    const temLonga = g.totalMangaLonga > 0
-    const linhasGrade = gradeEmLinhas(g.grade)
+    // Manga longa e punho só entram quando o grupo tem: são peças cortadas à
+    // parte, e quem está na mesa precisa saber quantas tirar de cada tamanho.
+    const extras: { titulo: string; grade: Grade; total: number }[] = []
+    if (g.totalMangaLonga > 0)
+      extras.push({ titulo: 'M. longa', grade: g.mangaLonga, total: g.totalMangaLonga })
+    if (g.totalComPunho > 0)
+      extras.push({ titulo: 'Punho', grade: g.comPunho, total: g.totalComPunho })
+
     autoTable(doc, {
       startY: y + 3,
-      head: [temLonga ? ['Tamanho', 'Pares', 'M. longa'] : ['Tamanho', 'Pares']],
-      body: linhasGrade.map((l) =>
-        temLonga
-          ? [l.tamanho, String(l.qtd), g.mangaLonga[l.tamanho] ? String(g.mangaLonga[l.tamanho]) : '—']
-          : [l.tamanho, String(l.qtd)],
-      ),
-      foot: [
-        temLonga
-          ? ['Total', String(g.total), String(g.totalMangaLonga)]
-          : ['Total', String(g.total)],
-      ],
+      head: [['Tamanho', 'Pares', ...extras.map((e) => e.titulo)]],
+      body: gradeEmLinhas(g.grade).map((l) => [
+        l.tamanho,
+        String(l.qtd),
+        ...extras.map((e) => (e.grade[l.tamanho] ? String(e.grade[l.tamanho]) : '—')),
+      ]),
+      foot: [['Total', String(g.total), ...extras.map((e) => String(e.total))]],
       styles: { fontSize: 9 },
       headStyles: { fillColor: [11, 18, 51] },
       footStyles: { fillColor: [11, 18, 51], fontStyle: 'bold' },

@@ -292,7 +292,7 @@ export default function MapaCorte() {
       const chave = g.chave
       for (const l of gradeEmLinhas(g.grade)) {
         total++
-        if (tamanhoCortado(lote.progresso?.[chave]?.[l.tamanho])) feitos++
+        if (tamanhoCortado(lote.progresso?.[chave]?.[l.tamanho], g.partes)) feitos++
       }
     }
     return { feitos, total }
@@ -489,7 +489,7 @@ export default function MapaCorte() {
               const chave = g.chave
               const linhas = gradeEmLinhas(g.grade)
               const feitosDoGrupo = linhas.filter((l) =>
-                tamanhoCortado(lote?.progresso?.[chave]?.[l.tamanho]),
+                tamanhoCortado(lote?.progresso?.[chave]?.[l.tamanho], g.partes),
               ).length
               return (
                 <div key={g.modelagem} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
@@ -513,6 +513,14 @@ export default function MapaCorte() {
                           className="rounded-full bg-amber-900 px-3 py-1 text-sm font-semibold text-amber-300"
                         >
                           {g.totalMangaLonga} manga longa
+                        </span>
+                      )}
+                      {g.totalComPunho > 0 && (
+                        <span
+                          title="Do total, quantas peças levam punho"
+                          className="rounded-full bg-sky-900 px-3 py-1 text-sm font-semibold text-sky-300"
+                        >
+                          {g.totalComPunho} com punho
                         </span>
                       )}
                       <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-semibold text-emerald-400">
@@ -579,7 +587,7 @@ export default function MapaCorte() {
 
                   <div className="grid gap-4 p-4 md:grid-cols-2">
                     <div>
-                      <table className="w-full max-w-sm text-sm">
+                      <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
                             <th className="pb-2 font-medium">Tamanho</th>
@@ -590,13 +598,21 @@ export default function MapaCorte() {
                             {g.totalMangaLonga > 0 && (
                               <th className="pb-2 text-right font-medium">Manga longa</th>
                             )}
-                            {lote && <th className="pb-2 text-right font-medium">Camisas / Mangas</th>}
+                            {/* punho é peça à parte no corte, então conta igual */}
+                            {g.totalComPunho > 0 && (
+                              <th className="pb-2 text-right font-medium">Punho</th>
+                            )}
+                            {lote && (
+                              <th className="pb-2 text-right font-medium">
+                                {g.partes.map((x) => x.rotulo).join(' / ')}
+                              </th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
                           {linhas.map((l) => {
                             const partes = partesDoTamanho(lote?.progresso?.[chave]?.[l.tamanho])
-                            const cortado = partes.camisa && partes.manga
+                            const cortado = g.partes.every((x) => partes[x.campo])
                             return (
                               <tr
                                 key={l.tamanho}
@@ -617,16 +633,24 @@ export default function MapaCorte() {
                                     )}
                                   </td>
                                 )}
+                                {g.totalComPunho > 0 && (
+                                  <td className="py-1.5 text-right">
+                                    {g.comPunho[l.tamanho] ? (
+                                      <span className="font-semibold text-sky-400">
+                                        {g.comPunho[l.tamanho]}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-700">—</span>
+                                    )}
+                                  </td>
+                                )}
                                 {lote && (
                                   <td className="py-1.5">
-                                    {/* o tamanho só fica pronto com as duas partes cortadas */}
+                                    {/* o tamanho só fica pronto quando todas as
+                                        partes do grupo estão cortadas — camisa
+                                        tem corpo e manga; shorts sai inteiro */}
                                     <div className="flex justify-end gap-1.5">
-                                      {(
-                                        [
-                                          ['camisa', 'Camisas'],
-                                          ['manga', 'Mangas'],
-                                        ] as const
-                                      ).map(([campo, rotulo]) => (
+                                      {g.partes.map(({ campo, rotulo }) => (
                                         <button
                                           key={campo}
                                           onClick={() => void alternarParte(chave, l.tamanho, campo)}
@@ -653,6 +677,9 @@ export default function MapaCorte() {
                             <td className="pt-2 text-right text-emerald-400">{g.total}</td>
                             {g.totalMangaLonga > 0 && (
                               <td className="pt-2 text-right text-amber-400">{g.totalMangaLonga}</td>
+                            )}
+                            {g.totalComPunho > 0 && (
+                              <td className="pt-2 text-right text-sky-400">{g.totalComPunho}</td>
                             )}
                             {lote && <td />}
                           </tr>

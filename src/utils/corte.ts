@@ -68,6 +68,26 @@ export function gradeEmLinhas(grade: Grade | null | undefined): { tamanho: strin
     .filter((l) => l.qtd > 0)
 }
 
+/**
+ * O que se marca como cortado em cada tamanho.
+ *
+ * Camisa sai em duas partes (o corpo e as mangas), que ficam prontas em
+ * momentos diferentes. Shorts sai inteiro, então tem um marcador só — pedir
+ * duas confirmações para uma peça que não tem manga só atrapalharia.
+ */
+export interface ParteCorte {
+  campo: keyof PartesCorte
+  rotulo: string
+}
+
+const PARTES_CAMISA: ParteCorte[] = [
+  { campo: 'camisa', rotulo: 'Camisas' },
+  { campo: 'manga', rotulo: 'Mangas' },
+]
+
+/** Peça inteiriça: reaproveita o campo `camisa` como o único marcador. */
+const PARTES_INTEIRAS = (rotulo: string): ParteCorte[] => [{ campo: 'camisa', rotulo }]
+
 /** Uma modelagem agrupada no mapa de corte. */
 export interface GrupoCorte {
   /**
@@ -89,6 +109,12 @@ export interface GrupoCorte {
   mangaLonga: Grade
   /** total de peças de manga longa no grupo */
   totalMangaLonga: number
+  /** quantas peças de cada tamanho levam punho (mesma ideia da manga longa) */
+  comPunho: Grade
+  /** total de peças com punho no grupo */
+  totalComPunho: number
+  /** o que se marca como cortado neste grupo (camisa tem manga; shorts não) */
+  partes: ParteCorte[]
   /** fichas que compõem o grupo (para abrir a ficha completa) */
   fichas: FichaTecnica[]
   /** id do anexo de Layout de Corte da primeira ficha que tiver um */
@@ -114,12 +140,16 @@ export const partesDoTamanho = (
   return { camisa: Boolean(v), manga: Boolean(v) }
 }
 
-/** O tamanho só está cortado quando camisa E manga foram feitas. */
+/**
+ * O tamanho só está cortado quando TODAS as partes do grupo foram feitas —
+ * camisa e manga na camisa; só a peça no shorts.
+ */
 export const tamanhoCortado = (
   v: boolean | Partial<PartesCorte & { frente: boolean; costa: boolean }> | undefined | null,
+  partes: ParteCorte[] = PARTES_CAMISA,
 ): boolean => {
   const p = partesDoTamanho(v)
-  return p.camisa && p.manga
+  return partes.every(({ campo }) => p[campo])
 }
 
 /** Uma especificação de corte do grupo (tecido, gola, punho…) */
@@ -240,29 +270,43 @@ const FAMILIAS_GOLA: [RegExp, string][] = [
 const ehMangaLonga = (f: FichaTecnica): boolean =>
   /LONGA/i.test(`${f.manga ?? ''} ${f.modelagem ?? ''}`)
 
+/** Punho é peça à parte no corte, então conta igual à manga longa. */
+const temPunho = (f: FichaTecnica): boolean =>
+  String(f.punho ?? '').trim() !== '' && punhoSimNao(String(f.punho)) === 'Sim'
+
 /**
  * Em que grupo de corte a ficha entra.
- * Devolve a chave (estável, usada para gravar o progresso) e o rótulo.
+ * Devolve a chave (estável, usada para gravar o progresso), o rótulo e as
+ * partes que se marcam como cortadas.
  */
-export function familiaDeCorte(f: FichaTecnica): { chave: string; rotulo: string } {
+export function familiaDeCorte(f: FichaTecnica): {
+  chave: string
+  rotulo: string
+  partes: ParteCorte[]
+} {
   const modelagem = String(f.modelagem ?? '').trim()
 
   // shorts, calção e bermuda cortam juntos, venham do pedido que vierem
-  if (PECAS_DE_BAIXO.test(modelagem)) return { chave: 'BAIXO', rotulo: 'Shorts' }
+  if (PECAS_DE_BAIXO.test(modelagem))
+    return { chave: 'BAIXO', rotulo: 'Shorts', partes: PARTES_INTEIRAS('Shorts') }
 
   const gola = String(f.gola ?? '').trim()
   if (gola) {
     for (const [re, rotulo] of FAMILIAS_GOLA) {
-      if (re.test(gola)) return { chave: rotulo.toUpperCase(), rotulo }
+      if (re.test(gola)) return { chave: rotulo.toUpperCase(), rotulo, partes: PARTES_CAMISA }
     }
     // gola que não conhecemos vira grupo próprio, com o nome como está na ficha
-    return { chave: `GOLA ${gola.toUpperCase()}`, rotulo: `Gola ${gola.toLowerCase()}` }
+    return {
+      chave: `GOLA ${gola.toUpperCase()}`,
+      rotulo: `Gola ${gola.toLowerCase()}`,
+      partes: PARTES_CAMISA,
+    }
   }
 
   // sem gola informada não dá para saber a modelagem: mantém a peça isolada,
   // que é o comportamento seguro — juntar errado estraga o corte
   const nome = modelagem || 'Sem modelagem'
-  return { chave: nome.toUpperCase(), rotulo: nome }
+  return { chave: nome.toUpperCase(), rotulo: nome, partes: PARTES_CAMISA }
 }
 
 /**
@@ -272,7 +316,7 @@ export function familiaDeCorte(f: FichaTecnica): { chave: string; rotulo: string
 export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
   const mapa = new Map<string, GrupoCorte>()
   for (const f of fichas) {
-    const { chave, rotulo } = familiaDeCorte(f)
+    const { chave, rotulo, partes } = familiaDeCorte(f)
     if (!chave) continue
     const grupo =
       mapa.get(chave) ??
@@ -283,17 +327,22 @@ export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
         total: 0,
         mangaLonga: {},
         totalMangaLonga: 0,
+        comPunho: {},
+        totalComPunho: 0,
+        partes,
         fichas: [],
         layoutAnexoId: null,
         semLayout: true,
       } satisfies GrupoCorte)
     const longa = ehMangaLonga(f)
+    const punho = temPunho(f)
     for (const [tam, qtd] of Object.entries(f.grade ?? {})) {
       const n = Number(qtd) || 0
       if (n <= 0) continue
       const t = tam.trim().toUpperCase()
       grupo.grade[t] = (grupo.grade[t] ?? 0) + n
       if (longa) grupo.mangaLonga[t] = (grupo.mangaLonga[t] ?? 0) + n
+      if (punho) grupo.comPunho[t] = (grupo.comPunho[t] ?? 0) + n
     }
     grupo.fichas.push(f)
     if (!grupo.layoutAnexoId && f.layout_anexo_id) {
@@ -305,6 +354,7 @@ export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
   for (const g of mapa.values()) {
     g.total = totalDaGrade(g.grade)
     g.totalMangaLonga = totalDaGrade(g.mangaLonga)
+    g.totalComPunho = totalDaGrade(g.comPunho)
   }
   return [...mapa.values()].sort((a, b) => a.modelagem.localeCompare(b.modelagem, 'pt-BR'))
 }
