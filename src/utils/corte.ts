@@ -266,9 +266,20 @@ const FAMILIAS_GOLA: [RegExp, string][] = [
   [/\bV\b|DECOTE\s*V/i, 'Gola redonda / V'],
 ]
 
-/** Manga longa aparece ora no campo da manga, ora no nome da modelagem. */
-const ehMangaLonga = (f: FichaTecnica): boolean =>
-  /LONGA/i.test(`${f.manga ?? ''} ${f.modelagem ?? ''}`)
+/**
+ * Se a peça é manga longa.
+ *
+ * O nome da modelagem manda, porque vem do título da grade — daquela tabela.
+ * O campo da manga é do CABEÇALHO da ficha e vale para o documento inteiro:
+ * numa ficha com uma tabela de manga curta e outra de longa, ele diz "LONGA"
+ * nas duas. Confiar nele fazia a grade inteira ser contada como manga longa.
+ */
+const ehMangaLonga = (f: FichaTecnica): boolean => {
+  const modelagem = String(f.modelagem ?? '')
+  if (/CURTA/i.test(modelagem)) return false
+  if (/LONGA/i.test(modelagem)) return true
+  return /LONGA/i.test(String(f.manga ?? ''))
+}
 
 /** Punho é peça à parte no corte, então conta igual à manga longa. */
 const temPunho = (f: FichaTecnica): boolean =>

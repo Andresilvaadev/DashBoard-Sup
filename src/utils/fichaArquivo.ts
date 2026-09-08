@@ -250,23 +250,64 @@ function linhasDaTabela(tbl: string): string[] {
   return [...corpo.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)].map((m) => m[0])
 }
 
-async function lerDocx(file: File): Promise<{ tabelas: string[][][]; paragrafos: string[] }> {
+async function lerDocx(file: File): Promise<{
+  tabelas: string[][][]
+  paragrafos: string[]
+  /** título escrito ACIMA de cada tabela (mesma posição do array de tabelas) */
+  tituloAcima: string[]
+}> {
   const { unzipSync, strFromU8 } = await import('fflate')
   const zip = unzipSync(new Uint8Array(await file.arrayBuffer()))
   const doc = zip['word/document.xml']
   if (!doc) throw new Error('Arquivo .docx inválido (sem document.xml)')
   const xml = strFromU8(doc).replace(/<w:del\b[\s\S]*?<\/w:del>/g, '')
 
-  const tabelas = blocos(xml, 'w:tbl').map((t) =>
+  const fragmentos = blocos(xml, 'w:tbl')
+  const tabelas = fragmentos.map((t) =>
     linhasDaTabela(t).map((tr) => blocos(tr, 'w:tc').map((tc) => textoDe(tc))),
   )
-  const paragrafos = [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)]
-    .map((m) => textoDe(m[0]))
-    .filter(Boolean)
-  return { tabelas, paragrafos }
+
+  // Onde cada tabela começa e termina, para saber o que está fora delas
+  const faixas: { ini: number; fim: number }[] = []
+  let busca = 0
+  for (const frag of fragmentos) {
+    const ini = xml.indexOf(frag, busca)
+    faixas.push({ ini, fim: ini + frag.length })
+    busca = ini + frag.length
+  }
+
+  // Todos os parágrafos alimentam a leitura do cabeçalho (inclusive os que
+  // estão dentro de células). Só os SOLTOS servem para achar o título de
+  // uma tabela — um parágrafo de dentro de outra célula não é título dela.
+  const paragrafos: string[] = []
+  const soltos: { pos: number; texto: string }[] = []
+  for (const m of xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)) {
+    const pos = m.index ?? 0
+    const texto = textoDe(m[0])
+    if (!texto) continue
+    paragrafos.push(texto)
+    if (!faixas.some((f) => pos >= f.ini && pos < f.fim)) soltos.push({ pos, texto })
+  }
+
+  // O nome da modelagem costuma vir como linha ACIMA da tabela, e não dentro
+  // dela. Sem olhar para fora, duas tabelas da mesma ficha (manga curta e
+  // manga longa) ficavam sem nome e acabavam somadas como se fossem uma.
+  const tituloAcima = faixas.map(({ ini }) => {
+    for (let i = soltos.length - 1; i >= 0; i--) {
+      if (soltos[i].pos >= ini) continue
+      return ehTituloModelagem(soltos[i].texto) ? soltos[i].texto : ''
+    }
+    return ''
+  })
+
+  return { tabelas, paragrafos, tituloAcima }
 }
 
-function interpretarDocx(tabelas: string[][][], paragrafos: string[]): FichaLida {
+function interpretarDocx(
+  tabelas: string[][][],
+  paragrafos: string[],
+  tituloAcima: string[] = [],
+): FichaLida {
   const avisos: string[] = []
   const ficha: FichaLida = {
     os: '', data: '', cliente: '', tecido: '', gola: '', manga: '', punho: '',
@@ -302,14 +343,18 @@ function interpretarDocx(tabelas: string[][][], paragrafos: string[]): FichaLida
   // Não exige cabeçalho MASCULIN/FEMININ: fichas costumam ter também uma
   // tabela INFANTIL (ou unissex) sem essa divisão, e ela conta igual.
   const lidas: GradeLida[] = []
-  for (const tbl of tabelas) {
+  for (const [idxTbl, tbl] of tabelas.entries()) {
     const idxCab = tbl.findIndex((l) => l.some((c) => /^MASCULIN/i.test(c)) || l.some((c) => /^FEMININ/i.test(c)))
 
     // sem cabeçalho de sexo, os dados começam na primeira linha
     const inicioDados = idxCab === -1 ? 0 : idxCab + 1
-    // título da grade: linha de célula única antes dos dados
+    // Título da grade: primeiro procura dentro da tabela (linha de célula
+    // única antes dos dados); não achando, usa a linha escrita ACIMA dela,
+    // que é como a maioria das fichas separa manga curta de manga longa.
     const titulo =
-      tbl.slice(0, Math.max(inicioDados, 1)).map((l) => l.filter(Boolean).join(' ')).find(ehTituloModelagem) ?? ''
+      tbl.slice(0, Math.max(inicioDados, 1)).map((l) => l.filter(Boolean).join(' ')).find(ehTituloModelagem) ??
+      tituloAcima[idxTbl] ??
+      ''
     // tecido declarado dentro da própria tabela (o shorts costuma ser de
     // outro tecido que a camisa); vazio = herda o tecido geral da ficha
     const tecidoDaTabela =
@@ -540,7 +585,9 @@ export async function lerFichaArquivo(file: File): Promise<FichaLida> {
   }
 
   const ficha = ehDocx
-    ? interpretarDocx(...(await lerDocx(file).then((r) => [r.tabelas, r.paragrafos] as const)))
+    ? interpretarDocx(
+        ...(await lerDocx(file).then((r) => [r.tabelas, r.paragrafos, r.tituloAcima] as const)),
+      )
     : interpretarPdf(await lerPdf(file))
 
   // OS pelo nome do arquivo quando não vier no conteúdo (ex.: "FICHA ... OS 470 ...")
