@@ -404,8 +404,16 @@ export default function Dashboard() {
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <h2 className="mb-3 text-sm font-semibold">Indicadores</h2>
           <dl className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-slate-400">Tempo médio de produção</dt>
+            {/* Média de TODOS os pedidos já entregues. O Relatórios mostra a
+                mesma conta só dos entregues no período escolhido, então os
+                dois números divergem de propósito — o rótulo diz qual é qual. */}
+            <div className="flex items-start justify-between gap-2">
+              <dt className="text-slate-400">
+                Tempo médio de produção
+                <span className="block text-xs text-slate-500">
+                  da criação à entrega · histórico completo
+                </span>
+              </dt>
               <dd className="font-semibold">{formatarDuracao(stats.tempoMedioProducao)}</dd>
             </div>
             <div className="flex justify-between">

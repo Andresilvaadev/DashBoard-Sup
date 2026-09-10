@@ -88,8 +88,12 @@ export default function Relatorios() {
     const iniciados = pedidos
       .filter((p) => p.created_at >= inicioISO)
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    // Exige o status, e não só a data: um pedido que foi concluído e depois
+    // reaberto deve sair da conta. O app limpa concluido_em ao trocar o
+    // status, mas uma alteração feita direto no banco não passa por ele —
+    // sem esta checagem, o pedido continuaria contando como produzido.
     const concluidos = pedidos
-      .filter((p) => p.concluido_em && p.concluido_em >= inicioISO)
+      .filter((p) => p.status === 'concluido' && p.concluido_em && p.concluido_em >= inicioISO)
       .sort((a, b) => b.concluido_em!.localeCompare(a.concluido_em!))
     const emAndamento = pedidos
       .filter((p) => p.status === 'em_andamento')
@@ -339,6 +343,9 @@ export default function Relatorios() {
   }, [pedidos, historico, metas, perdas, fichas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo])
 
   const labelPeriodo = PERIODOS.find((p) => p.id === periodo)!.label
+  /** "esta semana", "nos últimos 6 meses" — para caber no meio de uma frase */
+  const detalhePeriodo =
+    periodo === 'semestre' ? 'nos últimos 6 meses' : labelPeriodo.toLowerCase()
 
   const montarTabelas = (): TabelaExport[] => [
     {
@@ -357,7 +364,10 @@ export default function Relatorios() {
         ['Canecas produzidas', rel.canecasProduzidas],
         ['Média de peças por pedido', rel.mediaPecasPorPedido],
         ['Pedidos concluídos sem ficha técnica', rel.pedidosSemFicha],
-        ['Tempo médio de produção', formatarDuracao(rel.tempoMedioProducao)],
+        [
+          'Tempo médio de produção (da criação à entrega)',
+          formatarDuracao(rel.tempoMedioProducao),
+        ],
         ['Média diária de produção', rel.mediaDiaria.toFixed(1)],
         ['Meta do período', rel.totalMeta || '—'],
         ['Meta atingida', rel.pctMeta != null ? `${rel.pctMeta}%` : '—'],
@@ -659,7 +669,16 @@ export default function Relatorios() {
           )}
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard titulo="Tempo médio de produção" valor={formatarDuracao(rel.tempoMedioProducao)} cor="text-amber-400" />
+            {/* O período escolhe QUAIS pedidos entram; o tempo medido é a vida
+                inteira de cada um (criado → concluído). Um pedido criado há 19
+                dias e entregue nesta semana pesa 19 dias, não 3 — daí a média
+                aqui ser diferente da do Dashboard, que é do histórico todo. */}
+            <StatCard
+              titulo="Tempo médio de produção"
+              valor={formatarDuracao(rel.tempoMedioProducao)}
+              detalhe={`da criação à entrega · ${rel.concluidos.length} entregue(s) ${detalhePeriodo}`}
+              cor="text-amber-400"
+            />
             <StatCard titulo="Média diária" valor={rel.mediaDiaria.toFixed(1)} detalhe="pedidos/dia" cor="text-red-400" />
             <StatCard
               titulo="Meta atingida"
