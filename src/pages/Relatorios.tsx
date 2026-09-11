@@ -96,7 +96,7 @@ export default function Relatorios() {
       supabase.from('pedidos').select('*, etapa_atual:etapas(*)'),
       // só as colunas usadas nos cálculos (menos banda; histórico cresce muito)
       historicoPaginado(
-        'entrada, saida, etapa_id, pedido_id, segundos_gastos, funcionario:profiles(id, nome)',
+        'entrada, saida, etapa_id, pedido_id, funcionario:profiles(id, nome)',
         'entrada',
         inicio,
       ),
@@ -164,6 +164,11 @@ export default function Relatorios() {
     // Ir e voltar de etapa gera vários registros no histórico, mas o mesmo
     // pedido só conta uma vez — só cresce com pedidos novos.
     const fechados = historico.filter((h) => h.saida)
+    // Tempo de uma passagem pela etapa, em dias úteis. Calculado aqui a partir
+    // da entrada e da saída, e não da coluna segundos_gastos: ela é gravada
+    // pelo banco em tempo corrido, e o fim de semana parado entrava na conta.
+    const tempoUtil = (h: Pick<Historico, 'entrada' | 'saida'>) =>
+      h.saida ? segundosUteis(h.entrada, h.saida) : 0
     // Pedidos que a etapa entregou no período: quem SAIU dela (trabalho
     // terminado), mesmo tendo entrado antes. A última etapa não tem saída,
     // então lá conta quem chegou. Mesma regra do "Peças por etapa hoje".
@@ -179,7 +184,7 @@ export default function Relatorios() {
       // a contagem usa quem terminou a etapa no período
       const regs = (ultima ? historico : fechados).filter((h) => h.etapa_id === e.id)
       const pedidosUnicos = pedidosFeitosNaEtapa(e.id, ultima)
-      const tempos = regs.map((r) => r.segundos_gastos ?? 0).filter((t) => t > 0)
+      const tempos = regs.map(tempoUtil).filter((t) => t > 0)
       const metaEtapa = metas
         .filter((m) => m.etapa_id === e.id)
         .reduce((a, m) => a + m.quantidade, 0)
@@ -209,7 +214,7 @@ export default function Relatorios() {
       // a contagem usa quem terminou a etapa no período
       const regs = (ultima ? historico : fechados).filter((h) => h.etapa_id === e.id)
       const pedidosUnicos = pedidosFeitosNaEtapa(e.id, ultima)
-      const tempos = regs.map((r) => r.segundos_gastos ?? 0).filter((t) => t > 0)
+      const tempos = regs.map(tempoUtil).filter((t) => t > 0)
       return {
         nome: e.nome,
         cor: e.cor,
@@ -225,7 +230,7 @@ export default function Relatorios() {
       if (!idsCriacao.has(h.etapa_id)) continue
       tempoCriacaoPorPedido.set(
         h.pedido_id,
-        (tempoCriacaoPorPedido.get(h.pedido_id) ?? 0) + (h.segundos_gastos ?? 0),
+        (tempoCriacaoPorPedido.get(h.pedido_id) ?? 0) + tempoUtil(h),
       )
     }
     const temposCriacao = [...tempoCriacaoPorPedido.values()].filter((t) => t > 0)
@@ -243,7 +248,7 @@ export default function Relatorios() {
       // a contagem usa quem terminou a etapa no período
       const regs = (ultima ? historico : fechados).filter((h) => h.etapa_id === e.id)
       const pedidosUnicos = pedidosFeitosNaEtapa(e.id, ultima)
-      const tempos = regs.map((r) => r.segundos_gastos ?? 0).filter((t) => t > 0)
+      const tempos = regs.map(tempoUtil).filter((t) => t > 0)
       return {
         nome: e.nome,
         cor: e.cor,
@@ -257,7 +262,7 @@ export default function Relatorios() {
       if (!idsCaneca.has(h.etapa_id)) continue
       tempoCanecaPorPedido.set(
         h.pedido_id,
-        (tempoCanecaPorPedido.get(h.pedido_id) ?? 0) + (h.segundos_gastos ?? 0),
+        (tempoCanecaPorPedido.get(h.pedido_id) ?? 0) + tempoUtil(h),
       )
     }
     const temposCaneca = [...tempoCanecaPorPedido.values()].filter((t) => t > 0)
@@ -438,7 +443,7 @@ export default function Relatorios() {
     },
     {
       titulo: 'Produção por Etapa',
-      colunas: ['Etapa', 'Peças', 'Pedidos', 'Meta', 'Meta atingida', 'Tempo médio'],
+      colunas: ['Etapa', 'Peças', 'Pedidos', 'Meta', 'Meta atingida', 'Tempo médio (dias úteis)'],
       linhas: rel.porEtapa.map((e) => [
         e.nome,
         e.pecas ?? '—',
@@ -457,7 +462,7 @@ export default function Relatorios() {
       ? [
           {
             titulo: 'Criação de Arte — tempo por etapa',
-            colunas: ['Etapa', 'Pedidos', 'Tempo médio'],
+            colunas: ['Etapa', 'Pedidos', 'Tempo médio (dias úteis)'],
             linhas: [
               ...rel.porEtapaCriacao.map((e) => [e.nome, e.qtd, formatarDuracao(e.tempoMedio)]),
               ['Tempo médio total de criação', rel.totalCriacoes, formatarDuracao(rel.tempoMedioCriacao)],
@@ -469,7 +474,7 @@ export default function Relatorios() {
       ? [
           {
             titulo: 'Canecas — tempo por etapa',
-            colunas: ['Etapa', 'Pedidos', 'Tempo médio'],
+            colunas: ['Etapa', 'Pedidos', 'Tempo médio (dias úteis)'],
             linhas: [
               ...rel.porEtapaCaneca.map((e) => [e.nome, e.qtd, formatarDuracao(e.tempoMedio)]),
               ['Tempo médio total de canecas', rel.totalCanecas, formatarDuracao(rel.tempoMedioCaneca)],
@@ -823,7 +828,7 @@ export default function Relatorios() {
                     <th className="pb-2 text-right font-medium">Peças</th>
                     <th className="pb-2 text-right font-medium">Pedidos</th>
                     <th className="pb-2 text-right font-medium">Meta</th>
-                    <th className="pb-2 text-right font-medium">Tempo médio</th>
+                    <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -874,7 +879,7 @@ export default function Relatorios() {
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
                     <th className="pb-2 font-medium">Etapa da criação</th>
                     <th className="pb-2 text-right font-medium">Pedidos</th>
-                    <th className="pb-2 text-right font-medium">Tempo médio</th>
+                    <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -913,7 +918,7 @@ export default function Relatorios() {
                   <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
                     <th className="pb-2 font-medium">Etapa</th>
                     <th className="pb-2 text-right font-medium">Pedidos</th>
-                    <th className="pb-2 text-right font-medium">Tempo médio</th>
+                    <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
                   </tr>
                 </thead>
                 <tbody>

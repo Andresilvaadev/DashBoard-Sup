@@ -15,7 +15,7 @@ import { pedidosQuePassaramNaFrente } from '../utils/fila'
 import { comprimirImagem } from '../utils/imagem'
 import { ehKit, itensDoKit, totalKit } from '../lib/kit'
 import { removerAnexosStorage } from '../utils/storage'
-import { formatarData, formatarDataHora, formatarDuracao, segundosDesde } from '../utils/tempo'
+import { formatarData, formatarDataHora, formatarDuracao, segundosUteis } from '../utils/tempo'
 
 export default function PedidoDetalhe() {
   const { numero } = useParams()
@@ -367,7 +367,10 @@ export default function PedidoDetalhe() {
   // pedidos criados depois deste que já estão numa etapa à frente (ou concluídos)
   const passaramNaFrente = pedidosQuePassaramNaFrente(pedido, todosPedidos, etapas)
 
-  // tempo somado em cada etapa (entradas fechadas + tempo corrente da etapa aberta)
+  // tempo somado em cada etapa (entradas fechadas + tempo corrente da etapa
+  // aberta), em dias úteis — sábado e domingo parados não contam, a mesma
+  // regra do Relatórios. Calculado da entrada/saída, e não da coluna
+  // segundos_gastos, que o banco grava em tempo corrido.
   const tempoPorEtapa = etapas
     .map((e) => {
       let segundos = 0
@@ -375,11 +378,9 @@ export default function PedidoDetalhe() {
       for (const h of historico) {
         if (h.etapa_id !== e.id) continue
         if (h.saida) {
-          segundos +=
-            h.segundos_gastos ??
-            (new Date(h.saida).getTime() - new Date(h.entrada).getTime()) / 1000
+          segundos += segundosUteis(h.entrada, h.saida)
         } else {
-          segundos += segundosDesde(h.entrada)
+          segundos += segundosUteis(h.entrada, new Date())
           emAndamento = true
         }
       }
@@ -423,7 +424,7 @@ export default function PedidoDetalhe() {
               }}
             >
               {pedido.etapa_atual?.nome}
-              {etapaAbertaDesde && ` • há ${formatarDuracao(segundosDesde(etapaAbertaDesde))}`}
+              {etapaAbertaDesde && ` • há ${formatarDuracao(segundosUteis(etapaAbertaDesde, new Date()))}`}
             </span>
           )}
         </div>
@@ -757,7 +758,9 @@ export default function PedidoDetalhe() {
 
       {/* Tempo somado em cada etapa */}
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-        <h2 className="mb-3 text-sm font-semibold">Tempo em cada etapa</h2>
+        <h2 className="mb-3 text-sm font-semibold">
+          Tempo em cada etapa <span className="font-normal text-slate-500">· dias úteis</span>
+        </h2>
         {tempoPorEtapa.length === 0 ? (
           <p className="py-4 text-center text-sm text-slate-500">Sem registros ainda.</p>
         ) : (
@@ -818,7 +821,9 @@ export default function PedidoDetalhe() {
                     </span>
                   )}
                   <span className="text-xs text-slate-500">
-                    {h.saida ? formatarDuracao(h.segundos_gastos) : `em andamento (${formatarDuracao(segundosDesde(h.entrada))})`}
+                    {h.saida
+                      ? formatarDuracao(segundosUteis(h.entrada, h.saida))
+                      : `em andamento (${formatarDuracao(segundosUteis(h.entrada, new Date()))})`}
                   </span>
                 </div>
                 <p className="text-xs text-slate-400">
