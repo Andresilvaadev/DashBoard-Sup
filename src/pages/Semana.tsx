@@ -614,8 +614,10 @@ export default function Semana() {
         </section>
       )}
 
-      {/* ---- filtro por setor: cada um vê só o que é dele ---- */}
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+      {/* ---- filtro por setor: cada um vê só o que é dele ----
+          Quebra em linhas em vez de rolar para o lado: rolando, o último
+          setor aparecia cortado na borda do celular, com barra de rolagem. */}
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setFiltroSetor('todos')}
           className={chipFiltro(filtroSetor === 'todos')}

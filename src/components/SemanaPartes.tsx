@@ -46,10 +46,14 @@ export function FaixaDias({
   onEscolher: (indice: number) => void
   onSemana: () => void
 }) {
+  // Com sábado/domingo planejados a faixa chega a 8 colunas, que não cabem
+  // em 375px: ela rola para o lado em vez de espremer os botões. O pt-2
+  // abre espaço para a etiqueta "hoje", que fica acima do botão.
   return (
+    <div className="-mt-2 overflow-x-auto pt-2">
     <div
       className="grid gap-1.5"
-      style={{ gridTemplateColumns: `repeat(${dias.length + 1}, minmax(0, 1fr))` }}
+      style={{ gridTemplateColumns: `repeat(${dias.length + 1}, minmax(2.6rem, 1fr))` }}
     >
       {dias.map((d, i) => {
         const c = contagens[i] ?? { total: 0, feitas: 0 }
@@ -115,6 +119,7 @@ export function FaixaDias({
         <span className="text-[10px] font-extrabold uppercase">Semana</span>
       </button>
     </div>
+    </div>
   )
 }
 
@@ -136,6 +141,9 @@ export function ResumoSemana({
   // a coluna do setor precisa caber um nome inteiro ("Prensagem") no
   // celular; os dias encolhem até 2,25rem, que ainda é área de toque
   const colunas = `minmax(5.75rem, 1fr) repeat(${dias.length}, minmax(2.25rem, 4.5rem))`
+  // Largura mínima da tabela: com 5 dias cabe em 375px; com sábado/domingo
+  // não cabe, e aí ela rola para o lado em vez de cortar as últimas colunas.
+  const larguraMinima = `${5.75 + dias.length * 2.625 + 1.5}rem`
   const totais = dias.map((_, i) =>
     linhas.reduce(
       (acc, l) => ({ total: acc.total + l.porDia[i].total, feitas: acc.feitas + l.porDia[i].feitas }),
@@ -144,11 +152,15 @@ export function ResumoSemana({
   )
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+      <div className="overflow-x-auto">
+      <div style={{ minWidth: larguraMinima }}>
       <div
         className="grid items-end gap-1.5 border-b border-slate-800 px-3 py-2.5"
         style={{ gridTemplateColumns: colunas }}
       >
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Setor</span>
+        <span className="sticky left-0 z-10 bg-slate-900 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Setor
+        </span>
         {dias.map((d) => {
           const eHoje = dataLocal(d) === hoje
           return (
@@ -171,7 +183,7 @@ export function ResumoSemana({
           className="grid items-center gap-1.5 border-b border-slate-800/60 px-3 py-2"
           style={{ gridTemplateColumns: colunas }}
         >
-          <span className="flex min-w-0 items-center gap-1.5 text-xs font-bold sm:text-sm">
+          <span className="sticky left-0 z-10 flex min-w-0 items-center gap-1.5 bg-slate-900 text-xs font-bold sm:text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: l.cor }} />
             {/* quebra só entre palavras: "Conferindo e embalando" desce de
                 linha, mas "Prensagem" não vira "Prensage / m" */}
@@ -201,13 +213,17 @@ export function ResumoSemana({
         </div>
       ))}
 
-      <div className="grid items-center gap-1.5 bg-slate-950/60 px-3 py-2" style={{ gridTemplateColumns: colunas }}>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total</span>
+      <div className="grid items-center gap-1.5 bg-slate-950 px-3 py-2" style={{ gridTemplateColumns: colunas }}>
+        <span className="sticky left-0 z-10 bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Total
+        </span>
         {totais.map((c, i) => (
           <span key={i} className="text-center text-xs font-bold tabular-nums text-slate-300">
             {c.total === 0 ? '—' : `${c.feitas}/${c.total}`}
           </span>
         ))}
+      </div>
+      </div>
       </div>
     </div>
   )

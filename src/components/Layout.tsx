@@ -154,8 +154,10 @@ export default function Layout() {
       </aside>
 
       {/* Conteúdo */}
-      {/* pb reserva o espaço da barra inferior + área segura do iPhone */}
-      <main className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:ml-60 md:pb-6">
+      {/* pb reserva a barra inferior, a área segura do iPhone e o botão de voz,
+          que flutua acima dela: sem essa folga o fim da página (o último
+          botão de uma lista) parava embaixo do microfone e não dava para tocar */}
+      <main className="min-w-0 flex-1 pb-[calc(9.25rem+env(safe-area-inset-bottom))] md:ml-60 md:pb-6">
         {/* Topo (mobile) */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur md:hidden">
           <div className="flex items-center gap-2">
