@@ -9,7 +9,7 @@ import { useConfig } from '../hooks/useConfig'
 import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
-import { hojeISO } from '../utils/tempo'
+import { dataLocal, hojeISO } from '../utils/tempo'
 
 const DIAS_GRAFICO = 30
 
@@ -121,14 +121,17 @@ export default function Capacidade() {
           if (!s || m.saida < s.ts) primeiraSaida.set(m.pedido_id, { ts: m.saida, qtd })
         }
       }
-      for (const [pid, v] of primeiraEntrada) add(entradas, v.ts.slice(0, 10), pid, v.qtd)
-      for (const [pid, v] of primeiraSaida) add(saidas, v.ts.slice(0, 10), pid, v.qtd)
+      // dia LOCAL de cada movimento: a série e o "hoje" usam data local, e o
+      // banco grava em UTC — sem isso o que acontecia depois das 21h caía
+      // no dia seguinte
+      for (const [pid, v] of primeiraEntrada) add(entradas, dataLocal(v.ts), pid, v.qtd)
+      for (const [pid, v] of primeiraSaida) add(saidas, dataLocal(v.ts), pid, v.qtd)
     } else {
       // modo GERAL: pedidos criados x concluídos
       for (const p of pedidos) {
         if (p.status === 'cancelado') continue
-        add(entradas, p.created_at.slice(0, 10), p.id, p.quantidade || 0)
-        if (p.concluido_em) add(saidas, p.concluido_em.slice(0, 10), p.id, p.quantidade || 0)
+        add(entradas, dataLocal(p.created_at), p.id, p.quantidade || 0)
+        if (p.concluido_em) add(saidas, dataLocal(p.concluido_em), p.id, p.quantidade || 0)
       }
     }
 

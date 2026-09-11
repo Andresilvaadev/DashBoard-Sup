@@ -10,7 +10,7 @@ import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Profile } from '../types'
 import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
-import { formatarDataHora, formatarDuracao, hojeISO, segundosUteis } from '../utils/tempo'
+import { dataLocal, formatarDataHora, formatarDuracao, hojeISO, segundosUteis } from '../utils/tempo'
 
 export default function Dashboard() {
   const { profile } = useAuth()
@@ -72,7 +72,9 @@ export default function Dashboard() {
     const hoje = hojeISO()
     const emAndamento = pedidos.filter((p) => p.status === 'em_andamento')
     const concluidosHoje = pedidos.filter(
-      (p) => p.status === 'concluido' && p.concluido_em && p.concluido_em.slice(0, 10) === hoje,
+      // data LOCAL da conclusão: o banco grava em UTC, e depois das 21h o
+      // texto já traz o dia seguinte — o pedido entregue sumia do "hoje"
+      (p) => p.status === 'concluido' && p.concluido_em && dataLocal(p.concluido_em) === hoje,
     )
     const atrasados = emAndamento.filter((p) => p.data_prevista && p.data_prevista < hoje)
 
@@ -238,7 +240,7 @@ export default function Dashboard() {
           cor={stats.atrasados > 0 ? 'text-rose-400' : 'text-slate-300'}
         />
         <StatCard
-          titulo="Peças produzidas hoje"
+          titulo="Peças entregues hoje"
           valor={stats.pecasHoje}
           detalhe={`${stats.pecasTotal} no total`}
           cor="text-sky-400"

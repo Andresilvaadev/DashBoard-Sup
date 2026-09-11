@@ -30,11 +30,23 @@ export function formatarData(iso: string | null | undefined): string {
   return d.toLocaleDateString('pt-BR')
 }
 
-export function hojeISO(): string {
-  const d = new Date()
+/**
+ * Data LOCAL (aaaa-mm-dd) de um instante.
+ *
+ * O banco devolve horários em UTC ("2026-09-11T00:49:00+00:00"). Cortar o
+ * texto com slice(0, 10) dá a data de Greenwich, que depois das 21h de
+ * Brasília já é o dia seguinte — um pedido entregue às 21h50 caía no dia
+ * errado e sumia do "hoje". Sempre compare datas por esta função.
+ */
+export function dataLocal(instante: string | Date): string {
+  const d = new Date(instante)
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${mm}-${dd}`
+}
+
+export function hojeISO(): string {
+  return dataLocal(new Date())
 }
 
 export function segundosDesde(iso: string): number {

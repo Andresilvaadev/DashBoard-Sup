@@ -8,7 +8,7 @@ import { useToast } from '../contexts/ToastContext'
 import { useConfirm } from '../contexts/ConfirmContext'
 import { supabase } from '../lib/supabase'
 import type { Perda } from '../types'
-import { formatarDataHora } from '../utils/tempo'
+import { dataLocal, formatarDataHora } from '../utils/tempo'
 
 const MATERIAIS = ['Tecido', 'Papel', 'Tinta','Caneca', 'Outros']
 const UNIDADES = ['un', 'metros', 'folhas', 'litros', 'kg']
@@ -122,7 +122,9 @@ export default function Perdas() {
     // por mês (dentro do período)
     const porMesMap = new Map<string, { valor: number; registros: number }>()
     for (const p of perdas) {
-      const k = p.created_at.slice(0, 7)
+      // mês LOCAL do registro (em UTC, o que foi lançado depois das 21h do
+      // último dia do mês ia parar no mês seguinte)
+      const k = dataLocal(p.created_at).slice(0, 7)
       const atual = porMesMap.get(k) ?? { valor: 0, registros: 0 }
       atual.valor += p.valor || 0
       atual.registros += 1

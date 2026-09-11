@@ -10,7 +10,15 @@ import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Pedido, Perda } from '../types'
 import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
 import type { TabelaExport } from '../utils/exportar'
-import { diasUteisAteHoje, formatarData, formatarDataHora, formatarDuracao, segundosUteis } from '../utils/tempo'
+import {
+  dataLocal,
+  diasUteisAteHoje,
+  formatarData,
+  formatarDataHora,
+  formatarDuracao,
+  hojeISO,
+  segundosUteis,
+} from '../utils/tempo'
 
 type Periodo = 'hoje' | 'semana' | 'mes' | 'semestre' | 'ano'
 
@@ -90,7 +98,7 @@ export default function Relatorios() {
 
   useEffect(() => {
     const inicio = inicioDoPeriodo(periodo).toISOString()
-    const inicioData = inicio.slice(0, 10)
+    const inicioData = dataLocal(inicio)
     setCarregando(true)
     Promise.all([
       supabase.from('pedidos').select('*, etapa_atual:etapas(*)'),
@@ -138,7 +146,9 @@ export default function Relatorios() {
     const emAndamento = pedidos
       .filter((p) => p.status === 'em_andamento')
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    const hoje = new Date().toISOString().slice(0, 10)
+    // data local: em UTC, depois das 21h "hoje" já virava amanhã e as
+    // entregas previstas para hoje apareciam como atrasadas
+    const hoje = hojeISO()
     const atrasados = emAndamento
       .filter((p) => p.data_prevista && p.data_prevista < hoje)
       .sort((a, b) => a.data_prevista!.localeCompare(b.data_prevista!))
@@ -323,7 +333,9 @@ export default function Relatorios() {
     const porMes = periodo === 'semestre' || periodo === 'ano'
     const evolucaoMap = new Map<string, number>()
     for (const p of concluidos) {
-      const chave = porMes ? p.concluido_em!.slice(0, 7) : p.concluido_em!.slice(0, 10)
+      // dia local da conclusão (em UTC, as feitas depois das 21h iam para o dia seguinte)
+      const dia = dataLocal(p.concluido_em!)
+      const chave = porMes ? dia.slice(0, 7) : dia
       evolucaoMap.set(chave, (evolucaoMap.get(chave) ?? 0) + 1)
     }
     const evolucao = [...evolucaoMap.entries()]
