@@ -9,7 +9,7 @@ import { gradeEmLinhas, ordenarTamanhos, totalDaGrade } from '../utils/corte'
 import type { FichaLida } from '../utils/fichaArquivo'
 import { comprimirImagem } from '../utils/imagem'
 
-const TAMANHOS_PADRAO = ['PP', 'P', 'M', 'G', 'GG', 'XG']
+const TAMANHOS_PADRAO = ['PP', 'P', 'M', 'G', 'GG', 'XG', 'EGG']
 
 const vazia = (pedidoId: string): Partial<FichaTecnica> => ({
   pedido_id: pedidoId,
