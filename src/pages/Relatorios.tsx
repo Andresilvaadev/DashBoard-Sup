@@ -12,9 +12,10 @@ import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
 import type { TabelaExport } from '../utils/exportar'
 import { formatarData, formatarDataHora, formatarDuracao } from '../utils/tempo'
 
-type Periodo = 'semana' | 'mes' | 'semestre' | 'ano'
+type Periodo = 'hoje' | 'semana' | 'mes' | 'semestre' | 'ano'
 
 const PERIODOS: { id: Periodo; label: string }[] = [
+  { id: 'hoje', label: 'Hoje' },
   { id: 'semana', label: 'Esta semana' },
   { id: 'mes', label: 'Este mês' },
   { id: 'semestre', label: 'Últimos 6 meses' },
@@ -24,6 +25,8 @@ const PERIODOS: { id: Periodo; label: string }[] = [
 function inicioDoPeriodo(p: Periodo): Date {
   const d = new Date()
   d.setHours(0, 0, 0, 0)
+  // hoje: já é a meia-noite local, a mesma que o Dashboard usa
+  if (p === 'hoje') return d
   if (p === 'semana') {
     const dia = d.getDay() // 0 = domingo
     d.setDate(d.getDate() - (dia === 0 ? 6 : dia - 1)) // segunda-feira
@@ -37,6 +40,34 @@ function inicioDoPeriodo(p: Periodo): Date {
   return d
 }
 
+/**
+ * Busca o histórico em páginas de 1000 linhas. A API do Supabase devolve no
+ * máximo 1000 por consulta: num mês de produção o histórico passa disso, e o
+ * excedente seria cortado sem aviso — a produção do mês sairia por baixo.
+ */
+async function historicoPaginado(
+  colunas: string,
+  campo: 'entrada' | 'saida',
+  desde: string,
+): Promise<Historico[]> {
+  const PAGINA = 1000
+  const tudo: Historico[] = []
+  for (let inicio = 0; ; inicio += PAGINA) {
+    const { data, error } = await supabase
+      .from('historico')
+      .select(colunas)
+      .gte(campo, desde)
+      // ordem fixa: sem ela, as páginas podem repetir ou pular linhas
+      .order(campo, { ascending: true })
+      .order('id', { ascending: true })
+      .range(inicio, inicio + PAGINA - 1)
+    if (error || !data) break
+    tudo.push(...(data as unknown as Historico[]))
+    if (data.length < PAGINA) break
+  }
+  return tudo
+}
+
 export default function Relatorios() {
   const { etapasAtivas, etapasCriacao, etapasDoFluxo } = useEtapas()
   const etapasCaneca = etapasDoFluxo('caneca')
@@ -44,6 +75,9 @@ export default function Relatorios() {
   const [periodo, setPeriodo] = useState<Periodo>('semana')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [historico, setHistorico] = useState<Historico[]>([])
+  // passagens por etapa TERMINADAS no período (saída dentro dele), não
+  // importa quando começaram — base da produção por etapa
+  const [saidas, setSaidas] = useState<Historico[]>([])
   const [perdas, setPerdas] = useState<Perda[]>([])
   const [metas, setMetas] = useState<Meta[]>([])
   // grades das fichas técnicas: base da contagem de peças produzidas
@@ -61,19 +95,25 @@ export default function Relatorios() {
     Promise.all([
       supabase.from('pedidos').select('*, etapa_atual:etapas(*)'),
       // só as colunas usadas nos cálculos (menos banda; histórico cresce muito)
-      supabase
-        .from('historico')
-        .select('entrada, saida, etapa_id, pedido_id, segundos_gastos, funcionario:profiles(id, nome)')
-        .gte('entrada', inicio),
+      historicoPaginado(
+        'entrada, saida, etapa_id, pedido_id, segundos_gastos, funcionario:profiles(id, nome)',
+        'entrada',
+        inicio,
+      ),
+      // Produção por etapa conta pelo fim do trabalho: uma costura que
+      // começou sexta e terminou segunda é da semana de segunda. Filtrar
+      // só pela entrada (a consulta acima) deixava essas de fora.
+      historicoPaginado('etapa_id, pedido_id, saida', 'saida', inicio),
       supabase.from('metas').select('*').gte('data', inicioData),
       supabase
         .from('perdas')
         .select('*, funcionario:profiles(id, nome)')
         .gte('created_at', inicio),
       supabase.from('fichas_tecnicas').select('pedido_id, grade'),
-    ]).then(([p, h, m, pr, fic]) => {
+    ]).then(([p, h, sd, m, pr, fic]) => {
       setPedidos((p.data as Pedido[]) ?? [])
-      setHistorico((h.data as unknown as Historico[]) ?? [])
+      setHistorico(h)
+      setSaidas(sd)
       setMetas((m.data as Meta[]) ?? [])
       setPerdas((pr.data as Perda[]) ?? [])
       setFichas((fic.data as FichaContagem[]) ?? [])
@@ -124,12 +164,21 @@ export default function Relatorios() {
     // Ir e voltar de etapa gera vários registros no histórico, mas o mesmo
     // pedido só conta uma vez — só cresce com pedidos novos.
     const fechados = historico.filter((h) => h.saida)
+    // Pedidos que a etapa entregou no período: quem SAIU dela (trabalho
+    // terminado), mesmo tendo entrado antes. A última etapa não tem saída,
+    // então lá conta quem chegou. Mesma regra do "Peças por etapa hoje".
+    const pedidosFeitosNaEtapa = (etapaId: string, ultima: boolean) =>
+      new Set(
+        (ultima ? historico : saidas).filter((h) => h.etapa_id === etapaId).map((h) => h.pedido_id),
+      )
     const ultimaOrdem = Math.max(0, ...etapasAtivas.map((e) => e.ordem))
     const porEtapa = etapasAtivas.map((e) => {
       // a última etapa nunca tem saída: conta quem chegou nela (entregues)
-      const fonte = e.ordem >= ultimaOrdem ? historico : fechados
-      const regs = fonte.filter((h) => h.etapa_id === e.id)
-      const pedidosUnicos = new Set(regs.map((r) => r.pedido_id))
+      const ultima = e.ordem >= ultimaOrdem
+      // o tempo médio segue a base de antes (passagens iniciadas no período);
+      // a contagem usa quem terminou a etapa no período
+      const regs = (ultima ? historico : fechados).filter((h) => h.etapa_id === e.id)
+      const pedidosUnicos = pedidosFeitosNaEtapa(e.id, ultima)
       const tempos = regs.map((r) => r.segundos_gastos ?? 0).filter((t) => t > 0)
       const metaEtapa = metas
         .filter((m) => m.etapa_id === e.id)
@@ -155,9 +204,11 @@ export default function Relatorios() {
     const ultimaOrdemCriacao = Math.max(0, ...etapasCriacao.map((e) => e.ordem))
     const porEtapaCriacao = etapasCriacao.map((e) => {
       // a última etapa da criação não tem saída: conta quem chegou nela
-      const fonte = e.ordem >= ultimaOrdemCriacao ? historico : fechados
-      const regs = fonte.filter((h) => h.etapa_id === e.id)
-      const pedidosUnicos = new Set(regs.map((r) => r.pedido_id))
+      const ultima = e.ordem >= ultimaOrdemCriacao
+      // o tempo médio segue a base de antes (passagens iniciadas no período);
+      // a contagem usa quem terminou a etapa no período
+      const regs = (ultima ? historico : fechados).filter((h) => h.etapa_id === e.id)
+      const pedidosUnicos = pedidosFeitosNaEtapa(e.id, ultima)
       const tempos = regs.map((r) => r.segundos_gastos ?? 0).filter((t) => t > 0)
       return {
         nome: e.nome,
@@ -187,9 +238,11 @@ export default function Relatorios() {
     const idsCaneca = new Set(etapasCaneca.map((e) => e.id))
     const ultimaOrdemCaneca = Math.max(0, ...etapasCaneca.map((e) => e.ordem))
     const porEtapaCaneca = etapasCaneca.map((e) => {
-      const fonte = e.ordem >= ultimaOrdemCaneca ? historico : fechados
-      const regs = fonte.filter((h) => h.etapa_id === e.id)
-      const pedidosUnicos = new Set(regs.map((r) => r.pedido_id))
+      const ultima = e.ordem >= ultimaOrdemCaneca
+      // o tempo médio segue a base de antes (passagens iniciadas no período);
+      // a contagem usa quem terminou a etapa no período
+      const regs = (ultima ? historico : fechados).filter((h) => h.etapa_id === e.id)
+      const pedidosUnicos = pedidosFeitosNaEtapa(e.id, ultima)
       const tempos = regs.map((r) => r.segundos_gastos ?? 0).filter((t) => t > 0)
       return {
         nome: e.nome,
@@ -340,7 +393,7 @@ export default function Relatorios() {
       pedidosSemFicha,
       mediaPecasPorPedido,
     }
-  }, [pedidos, historico, metas, perdas, fichas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo])
+  }, [pedidos, historico, saidas, metas, perdas, fichas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo])
 
   const labelPeriodo = PERIODOS.find((p) => p.id === periodo)!.label
   /** "esta semana", "nos últimos 6 meses" — para caber no meio de uma frase */
@@ -754,7 +807,11 @@ export default function Relatorios() {
 
             {/* Tempo médio por etapa */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <h2 className="mb-3 text-sm font-semibold">Produção por etapa</h2>
+              <h2 className="text-sm font-semibold">Produção por etapa</h2>
+              <p className="mb-3 mt-0.5 text-xs text-slate-500">
+                O que saiu de cada etapa {detalhePeriodo} — trabalho terminado, mesmo que tenha
+                começado antes. Na última etapa, o que chegou.
+              </p>
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
