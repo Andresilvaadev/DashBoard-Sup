@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import GrupoCorteCard from '../components/GrupoCorteCard'
 import RelatorioCortes from '../components/RelatorioCortes'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -11,9 +12,7 @@ import { supabase } from '../lib/supabase'
 import type { Anexo, FichaTecnica, LoteCorte, PartesCorte } from '../types'
 import {
   agruparParaCorte,
-  especificacoesDoGrupo,
   gradeEmLinhas,
-  observacoesDoGrupo,
   partesDoTamanho,
   tamanhoCortado,
   type GrupoCorte,
@@ -298,20 +297,110 @@ export default function MapaCorte() {
     return { feitos, total }
   }, [grupos, lote])
 
+  // resumo do lote: o que interessa de relance antes de começar a cortar
+  const totalMangaLonga = grupos?.reduce((a, g) => a + g.totalMangaLonga, 0) ?? 0
+  const totalComPunho = grupos?.reduce((a, g) => a + g.totalComPunho, 0) ?? 0
+  const pctProgresso = progresso.total ? Math.round((progresso.feitos / progresso.total) * 100) : 0
+  const pedidosDoLote = lote ? pedidos.filter((p) => lote.pedido_ids.includes(p.id)) : []
+  const todosMarcados = disponiveis.length > 0 && disponiveis.every((p) => selecionados.has(p.id))
+  const alternarTodos = () =>
+    setSelecionados(todosMarcados ? new Set() : new Set(disponiveis.map((p) => p.id)))
+  // no celular as ações ficam numa barra fixa acima da navegação
+  const temBarraCelular = aba === 'mapa' && (Boolean(lote) || disponiveis.length > 0)
+
+  // O botão de voz flutua no canto de baixo e cobriria os botões desta
+  // barra. A variável faz ele subir só enquanto a barra estiver na tela.
+  useEffect(() => {
+    const raiz = document.documentElement
+    raiz.style.setProperty('--barra-acoes-celular', temBarraCelular ? '4.5rem' : '0px')
+    return () => {
+      raiz.style.removeProperty('--barra-acoes-celular')
+    }
+  }, [temBarraCelular])
+
+  /**
+   * Botões de ação do mapa. Os mesmos no computador (no topo) e no celular
+   * (barra fixa embaixo, na altura do polegar) — muda só o tamanho.
+   */
+  const acoes = (celular: boolean) => {
+    const base = celular
+      ? 'flex h-12 items-center justify-center rounded-xl text-sm font-bold'
+      : 'rounded-lg px-4 py-2.5 text-sm font-semibold'
+    if (!lote) {
+      return (
+        <button
+          onClick={() => void gerar()}
+          disabled={gerando || selecionados.size === 0}
+          className={`${base} ${celular ? 'flex-1' : ''} bg-red-600 text-white hover:bg-red-500 disabled:opacity-40`}
+        >
+          {gerando
+            ? 'Gerando…'
+            : selecionados.size === 0
+              ? 'Selecione os pedidos'
+              : `Gerar Mapa de Corte (${selecionados.size})`}
+        </button>
+      )
+    }
+    return (
+      <>
+        <button
+          onClick={() => void concluirCorte()}
+          disabled={concluindo}
+          className={`${base} ${celular ? 'flex-1' : ''} bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50`}
+        >
+          {concluindo ? 'Concluindo…' : '✓ Terminei o corte'}
+        </button>
+        {grupos && grupos.length > 0 && (
+          <button
+            onClick={() => void imprimir()}
+            disabled={baixando}
+            title="Imprimir o mapa em PDF"
+            aria-label="Imprimir o mapa em PDF"
+            className={`${base} ${celular ? 'w-12' : ''} border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:opacity-50`}
+          >
+            {celular ? (
+              baixando ? (
+                '…'
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <path d="M6 9V2h12v7" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect x="6" y="14" width="12" height="8" />
+                </svg>
+              )
+            ) : baixando ? (
+              'Gerando PDF…'
+            ) : (
+              '↓ Imprimir Mapa'
+            )}
+          </button>
+        )}
+        <button
+          onClick={() => void descartarLote()}
+          title="Descartar o lote sem mover os pedidos"
+          aria-label="Descartar o lote sem mover os pedidos"
+          className={`${base} ${celular ? 'w-12' : 'px-3'} border border-slate-700 bg-slate-900 text-slate-400 hover:bg-slate-800`}
+        >
+          ✕
+        </button>
+      </>
+    )
+  }
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold md:text-2xl">Mapa de Corte</h1>
+    <div className={`space-y-4 md:space-y-5 ${temBarraCelular ? 'pb-20 md:pb-0' : ''}`}>
+      {/* ---- título + alternância Mapa / Cortados ---- */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-extrabold tracking-tight">Mapa de Corte</h1>
           <p className="text-sm text-slate-400">
             {lote
-              ? `Lote aberto desde ${formatarDataHora(lote.created_at)} • ${lote.pedido_ids.length} pedido(s)`
-              : 'Pedidos que estão na etapa de corte — o sistema soma as grades por modelagem'}
+              ? `Lote aberto desde ${formatarDataHora(lote.created_at)} · ${lote.pedido_ids.length} pedido(s)`
+              : 'Selecione os pedidos da etapa de corte — o sistema soma as grades por modelagem'}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {/* alterna entre montar o corte e ver o histórico */}
-          <div className="flex rounded-lg border border-slate-700 p-0.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full rounded-xl border border-slate-700 bg-slate-900 p-1 md:w-auto">
             {(
               [
                 ['mapa', 'Mapa'],
@@ -321,49 +410,17 @@ export default function MapaCorte() {
               <button
                 key={id}
                 onClick={() => setAba(id)}
-                className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-                  aba === id ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors md:flex-none ${
+                  aba === id ? 'bg-red-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 {label}
               </button>
             ))}
           </div>
-          {aba === 'mapa' && !lote && (
-            <button
-              onClick={() => void gerar()}
-              disabled={gerando || selecionados.size === 0}
-              className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
-            >
-              {gerando ? 'Gerando…' : `Gerar Mapa de Corte (${selecionados.size})`}
-            </button>
-          )}
-          {aba === 'mapa' && grupos && grupos.length > 0 && (
-            <button
-              onClick={() => void imprimir()}
-              disabled={baixando}
-              className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium hover:bg-slate-800 disabled:opacity-50"
-            >
-              {baixando ? 'Gerando PDF…' : '↓ Imprimir Mapa'}
-            </button>
-          )}
-          {aba === 'mapa' && lote && (
-            <>
-              <button
-                onClick={() => void concluirCorte()}
-                disabled={concluindo}
-                className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-              >
-                {concluindo ? 'Concluindo…' : '✓ Terminei o corte'}
-              </button>
-              <button
-                onClick={() => void descartarLote()}
-                className="rounded-lg border border-slate-700 px-3 py-2.5 text-sm font-medium text-slate-400 hover:bg-slate-800"
-                title="Descartar o lote sem mover os pedidos"
-              >
-                ✕
-              </button>
-            </>
+          {/* no computador as ações ficam aqui; no celular, na barra fixa de baixo */}
+          {aba === 'mapa' && (lote || disponiveis.length > 0) && (
+            <div className="hidden flex-wrap gap-2 md:flex">{acoes(false)}</div>
           )}
         </div>
       </div>
@@ -371,41 +428,56 @@ export default function MapaCorte() {
       {/* histórico do que já foi cortado */}
       {aba === 'relatorio' && <RelatorioCortes />}
 
-      {/* barra de progresso do corte */}
+      {/* ---- progresso: fica preso no topo enquanto a cortadeira rola a lista ---- */}
       {aba === 'mapa' && lote && progresso.total > 0 && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="font-medium">Progresso do corte</span>
-            <span className={progresso.feitos === progresso.total ? 'font-bold text-emerald-400' : 'text-slate-400'}>
-              {progresso.feitos}/{progresso.total} tamanhos cortados
+        <div className="sticky top-[53px] z-20 -mx-4 border-y border-slate-800 bg-slate-950/95 px-4 py-2.5 backdrop-blur md:static md:mx-0 md:rounded-2xl md:border md:bg-slate-900 md:p-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm font-semibold">Progresso do corte</span>
+            <span
+              className={`text-sm font-bold tabular-nums ${
+                progresso.feitos === progresso.total ? 'text-emerald-400' : 'text-slate-300'
+              }`}
+            >
+              {progresso.feitos}/{progresso.total} tamanhos · {pctProgresso}%
             </span>
           </div>
-          <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-800">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all"
-              style={{ width: `${progresso.total ? (progresso.feitos / progresso.total) * 100 : 0}%` }}
+              style={{ width: `${pctProgresso}%` }}
             />
           </div>
         </div>
       )}
 
-      {/* seleção de pedidos (só quando não há lote aberto) */}
+      {/* ---- seleção de pedidos (só quando não há lote aberto) ---- */}
       {aba === 'mapa' && !lote && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">
+        <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-base font-bold">
               Pedidos na etapa de corte
-              <span className="ml-2 text-xs font-normal text-slate-500">({disponiveis.length})</span>
+              <span className="ml-1.5 text-sm font-normal text-slate-500">({disponiveis.length})</span>
             </h2>
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por número ou cliente…"
-              className="w-56 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm outline-none focus:border-red-500"
-            />
+            <div className="flex gap-2">
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por número ou cliente…"
+                className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-red-500 sm:w-64 sm:flex-none"
+              />
+              {disponiveis.length > 0 && (
+                <button
+                  onClick={alternarTodos}
+                  className="shrink-0 rounded-xl border border-slate-700 px-3 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+                >
+                  {todosMarcados ? 'Limpar' : 'Todos'}
+                </button>
+              )}
+            </div>
           </div>
+
           {disponiveis.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">
+            <p className="py-8 text-center text-sm text-slate-500">
               {idsEtapaCorte.size === 0
                 ? 'Nenhuma etapa chamada "Corte" no fluxo de produção — crie ou renomeie uma em Admin → Fluxo.'
                 : busca
@@ -413,7 +485,7 @@ export default function MapaCorte() {
                   : 'Nenhum pedido na etapa de corte no momento.'}
             </p>
           ) : (
-            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {disponiveis.map((p) => {
                 const marcado = selecionados.has(p.id)
                 const temFicha = comFicha.has(p.id)
@@ -421,21 +493,29 @@ export default function MapaCorte() {
                   <button
                     key={p.id}
                     onClick={() => alternar(p.id)}
-                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                      marcado ? 'border-red-500 bg-red-950/30' : 'border-slate-800 hover:border-slate-600'
+                    aria-pressed={marcado}
+                    className={`flex min-h-14 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                      marcado
+                        ? 'border-red-500 bg-red-950/40'
+                        : 'border-slate-800 bg-slate-950/40 hover:border-slate-600'
                     }`}
                   >
                     <span
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 text-xs font-black ${
                         marcado ? 'border-red-500 bg-red-600 text-white' : 'border-slate-600'
                       }`}
                     >
                       {marcado && '✓'}
                     </span>
-                    <span className="font-bold text-red-400">#{p.numero}</span>
-                    <span className="min-w-0 flex-1 truncate text-slate-300">{p.cliente}</span>
+                    <span className="min-w-0 flex-1 leading-snug">
+                      <span className="mr-1.5 font-black text-red-400">#{p.numero}</span>
+                      <span className="text-sm font-medium text-slate-200">{p.cliente}</span>
+                    </span>
                     {!temFicha && (
-                      <span className="shrink-0 text-[10px] text-amber-500" title="Pedido sem ficha técnica">
+                      <span
+                        className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400"
+                        title="Pedido sem ficha técnica — não entra no mapa"
+                      >
                         sem ficha
                       </span>
                     )}
@@ -444,283 +524,76 @@ export default function MapaCorte() {
               })}
             </div>
           )}
+        </section>
+      )}
+
+      {/* ---- resumo do lote aberto ---- */}
+      {aba === 'mapa' && lote && grupos && grupos.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:gap-3">
+          {(
+            [
+              ['Peças no lote', totalGeral, 'text-emerald-400'],
+              ['Modelagens', grupos.length, 'text-slate-100'],
+              ['Manga longa', totalMangaLonga, 'text-amber-300'],
+              ['Com punho', totalComPunho, 'text-sky-300'],
+            ] as const
+          ).map(([rotulo, valor, cor]) => (
+            <div key={rotulo} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3">
+              <p className={`text-3xl font-black leading-none tabular-nums ${valor > 0 ? cor : 'text-slate-600'}`}>
+                {valor}
+              </p>
+              <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{rotulo}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* pedidos do lote aberto */}
       {aba === 'mapa' && lote && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <h2 className="mb-2 text-sm font-semibold">Pedidos deste lote</h2>
+        <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+          <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Pedidos deste lote
+          </h2>
           <div className="flex flex-wrap gap-1.5">
-            {pedidos
-              .filter((p) => lote.pedido_ids.includes(p.id))
-              .map((p) => (
-                <Link
-                  key={p.id}
-                  to={`/pedidos/${p.numero}`}
-                  className="rounded-full border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:border-red-500 hover:text-red-400"
-                >
-                  #{p.numero} · {p.cliente}
-                </Link>
-              ))}
+            {pedidosDoLote.map((p) => (
+              <Link
+                key={p.id}
+                to={`/pedidos/${p.numero}`}
+                className="min-h-9 rounded-full border border-slate-700 bg-slate-950/40 px-3 py-1.5 text-xs text-slate-300 hover:border-red-500 hover:text-red-400"
+              >
+                <span className="font-bold text-red-400">#{p.numero}</span> · {p.cliente}
+              </Link>
+            ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* resultado do mapa */}
+      {/* ---- grupos do mapa ---- */}
       {aba === 'mapa' &&
         grupos &&
         (grupos.length === 0 ? (
-          <p className="py-10 text-center text-sm text-slate-500">
+          <p className="rounded-2xl border border-dashed border-slate-700 py-10 text-center text-sm text-slate-500">
             Os pedidos selecionados não têm fichas técnicas cadastradas.
           </p>
         ) : (
-          <>
-            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
-              <p className="text-sm">
-                <span className="font-semibold">{grupos.length} modelagem(ns)</span>
-                <span className="mx-2 text-slate-600">•</span>
-                <span className="font-semibold text-emerald-400">{totalGeral} pares</span>
-                <span className="ml-2 text-xs text-slate-500">no total (frente + costa já inclusos)</span>
-              </p>
-            </div>
-
-            {grupos.map((g) => {
-              const chave = g.chave
-              const linhas = gradeEmLinhas(g.grade)
-              const feitosDoGrupo = linhas.filter((l) =>
-                tamanhoCortado(lote?.progresso?.[chave]?.[l.tamanho], g.partes),
-              ).length
-              return (
-                <div key={g.modelagem} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
-                    <h2 className="text-base font-bold uppercase tracking-wide">{g.modelagem}</h2>
-                    <span className="flex items-center gap-2">
-                      {lote && (
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            feitosDoGrupo === linhas.length
-                              ? 'bg-emerald-900 text-emerald-300'
-                              : 'bg-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {feitosDoGrupo}/{linhas.length} cortados
-                        </span>
-                      )}
-                      {g.totalMangaLonga > 0 && (
-                        <span
-                          title="Do total, quantas peças levam manga longa"
-                          className="rounded-full bg-amber-900 px-3 py-1 text-sm font-semibold text-amber-300"
-                        >
-                          {g.totalMangaLonga} manga longa
-                        </span>
-                      )}
-                      {g.totalComPunho > 0 && (
-                        <span
-                          title="Do total, quantas peças levam punho"
-                          className="rounded-full bg-sky-900 px-3 py-1 text-sm font-semibold text-sky-300"
-                        >
-                          {g.totalComPunho} com punho
-                        </span>
-                      )}
-                      <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-semibold text-emerald-400">
-                        Total: {g.total} pares
-                      </span>
-                    </span>
-                  </div>
-
-                  {/* Especificações do corte: o que a cortadeira precisa saber
-                      antes de encostar na tesoura */}
-                  {(() => {
-                    const especs = especificacoesDoGrupo(g)
-                    const obs = observacoesDoGrupo(g)
-                    if (especs.length === 0 && obs.length === 0) return null
-                    return (
-                      <div className="border-b border-slate-800 bg-slate-950/40 px-4 py-3">
-                        <div className="flex flex-wrap gap-x-5 gap-y-2">
-                          {especs.map((e) => (
-                            <div key={e.rotulo} className="min-w-0">
-                              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                                {e.rotulo}
-                                {e.divergente && (
-                                  <span
-                                    title="As fichas deste grupo têm valores diferentes — confira antes de cortar junto"
-                                    className="ml-1.5 rounded-full bg-amber-900 px-1.5 py-0.5 text-[9px] font-bold text-amber-300"
-                                  >
-                                    diferente
-                                  </span>
-                                )}
-                              </p>
-                              <p
-                                className={`text-sm font-semibold ${
-                                  e.divergente ? 'text-amber-300' : 'text-slate-200'
-                                }`}
-                              >
-                                {e.valores.map((v, i) => (
-                                  <span key={v.valor}>
-                                    {i > 0 && <span className="text-slate-600"> · </span>}
-                                    {v.valor}
-                                    {e.divergente && v.pedidos.length > 0 && (
-                                      <span className="ml-1 text-xs font-normal text-slate-500">
-                                        (#{v.pedidos.join(', #')})
-                                      </span>
-                                    )}
-                                  </span>
-                                ))}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-
-                        {obs.map((o) => (
-                          <p key={o.texto} className="mt-2 text-xs text-amber-200/90">
-                            <span className="font-semibold">Obs.</span>{' '}
-                            {o.pedidos.length > 0 && (
-                              <span className="text-slate-500">#{o.pedidos.join(', #')} — </span>
-                            )}
-                            {o.texto}
-                          </p>
-                        ))}
-                      </div>
-                    )
-                  })()}
-
-                  <div className="grid gap-4 p-4 md:grid-cols-2">
-                    <div>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
-                            <th className="pb-2 font-medium">Tamanho</th>
-                            <th className="pb-2 text-right font-medium">Pares</th>
-                            {/* só aparece quando há manga longa no grupo: o corpo
-                                é o mesmo, o que muda é quantas mangas compridas
-                                sair */}
-                            {g.totalMangaLonga > 0 && (
-                              <th className="pb-2 text-right font-medium">Manga longa</th>
-                            )}
-                            {/* punho é peça à parte no corte, então conta igual */}
-                            {g.totalComPunho > 0 && (
-                              <th className="pb-2 text-right font-medium">Punho</th>
-                            )}
-                            {lote && (
-                              <th className="pb-2 text-right font-medium">
-                                {g.partes.map((x) => x.rotulo).join(' / ')}
-                              </th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {linhas.map((l) => {
-                            const partes = partesDoTamanho(lote?.progresso?.[chave]?.[l.tamanho])
-                            const cortado = g.partes.every((x) => partes[x.campo])
-                            return (
-                              <tr
-                                key={l.tamanho}
-                                className={`border-b border-slate-800/50 ${cortado ? 'opacity-60' : ''}`}
-                              >
-                                <td className={`py-1.5 font-semibold ${cortado ? 'line-through' : ''}`}>
-                                  {l.tamanho}
-                                </td>
-                                <td className="py-1.5 text-right text-slate-300">{l.qtd}</td>
-                                {g.totalMangaLonga > 0 && (
-                                  <td className="py-1.5 text-right">
-                                    {g.mangaLonga[l.tamanho] ? (
-                                      <span className="font-semibold text-amber-400">
-                                        {g.mangaLonga[l.tamanho]}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-700">—</span>
-                                    )}
-                                  </td>
-                                )}
-                                {g.totalComPunho > 0 && (
-                                  <td className="py-1.5 text-right">
-                                    {g.comPunho[l.tamanho] ? (
-                                      <span className="font-semibold text-sky-400">
-                                        {g.comPunho[l.tamanho]}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-700">—</span>
-                                    )}
-                                  </td>
-                                )}
-                                {lote && (
-                                  <td className="py-1.5">
-                                    {/* o tamanho só fica pronto quando todas as
-                                        partes do grupo estão cortadas — camisa
-                                        tem corpo e manga; shorts sai inteiro */}
-                                    <div className="flex justify-end gap-1.5">
-                                      {g.partes.map(({ campo, rotulo }) => (
-                                        <button
-                                          key={campo}
-                                          onClick={() => void alternarParte(chave, l.tamanho, campo)}
-                                          title={`${rotulo} do tamanho ${l.tamanho}`}
-                                          className={`rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${
-                                            partes[campo]
-                                              ? 'border-emerald-700 bg-emerald-900 text-emerald-300'
-                                              : 'border-slate-600 text-slate-400 hover:border-emerald-600 hover:text-emerald-400'
-                                          }`}
-                                        >
-                                          {partes[campo] ? '✓' : '○'} {rotulo}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </td>
-                                )}
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t border-slate-700 text-sm font-bold">
-                            <td className="pt-2">Total</td>
-                            <td className="pt-2 text-right text-emerald-400">{g.total}</td>
-                            {g.totalMangaLonga > 0 && (
-                              <td className="pt-2 text-right text-amber-400">{g.totalMangaLonga}</td>
-                            )}
-                            {g.totalComPunho > 0 && (
-                              <td className="pt-2 text-right text-sky-400">{g.totalComPunho}</td>
-                            )}
-                            {lote && <td />}
-                          </tr>
-                        </tfoot>
-                      </table>
-
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {g.fichas.map((f) => (
-                          <button
-                            key={f.id}
-                            onClick={() => setFichaAberta(f)}
-                            className="rounded-full border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:border-red-500 hover:text-red-400"
-                          >
-                            Ficha #{f.pedido?.numero ?? '—'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      {g.layoutAnexoId && urlsLayout[g.layoutAnexoId] ? (
-                        <a href={urlsLayout[g.layoutAnexoId]} target="_blank" rel="noreferrer">
-                          <img
-                            src={urlsLayout[g.layoutAnexoId]}
-                            alt={`Layout de corte — ${g.modelagem}`}
-                            className="max-h-56 w-full rounded-lg border border-slate-700 object-contain"
-                          />
-                          <p className="mt-1 text-center text-xs text-slate-500">Layout de Corte</p>
-                        </a>
-                      ) : (
-                        <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-amber-800 px-4 text-center text-sm text-amber-400">
-                          Esta ficha técnica não possui um Layout de Corte definido.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </>
+          grupos.map((g) => (
+            <GrupoCorteCard
+              key={g.chave}
+              grupo={g}
+              progresso={lote?.progresso?.[g.chave]}
+              comLote={Boolean(lote)}
+              urlLayout={g.layoutAnexoId ? urlsLayout[g.layoutAnexoId] : undefined}
+              onAlternarParte={(tamanho, campo) => void alternarParte(g.chave, tamanho, campo)}
+              onAbrirFicha={setFichaAberta}
+            />
+          ))
         ))}
+
+      {/* ---- barra de ações do celular: na altura do polegar, acima da navegação ---- */}
+      {temBarraCelular && (
+        <div className="fixed inset-x-0 bottom-[calc(3.625rem+env(safe-area-inset-bottom))] z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-2.5 backdrop-blur md:hidden">
+          <div className="flex gap-2">{acoes(true)}</div>
+        </div>
+      )}
 
       {/* ficha técnica completa */}
       {fichaAberta && (

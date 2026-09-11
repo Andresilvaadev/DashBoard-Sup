@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import StatCard from './StatCard'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import type { Grade, LoteCorte, ResumoCorte } from '../types'
@@ -174,43 +173,50 @@ export default function RelatorioCortes() {
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard titulo="Lotes cortados" valor={rel.comResumo.length} cor="text-red-400" />
-            <StatCard titulo="Pedidos cortados" valor={rel.totalPedidos} cor="text-violet-400" />
-            <StatCard titulo="Pares cortados" valor={rel.totalPares} cor="text-emerald-400" />
+          {/* compactos: três lado a lado cabem num celular de 375px */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {(
+              [
+                ['Lotes cortados', rel.comResumo.length, 'text-red-400'],
+                ['Pedidos cortados', rel.totalPedidos, 'text-violet-400'],
+                ['Peças cortadas', rel.totalPares, 'text-emerald-400'],
+              ] as const
+            ).map(([rotulo, valor, cor]) => (
+              <div
+                key={rotulo}
+                className="rounded-xl border border-slate-800 bg-slate-900 px-2 py-3 text-center sm:p-4 sm:text-left"
+              >
+                <p className={`text-2xl font-black tabular-nums sm:text-3xl ${cor}`}>{valor}</p>
+                <p className="mt-0.5 text-[10px] font-semibold uppercase leading-tight tracking-wider text-slate-500 sm:text-xs">
+                  {rotulo}
+                </p>
+              </div>
+            ))}
           </div>
 
           {/* soma por modelagem no período */}
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
             <h3 className="mb-3 text-sm font-semibold">Cortado por modelagem</h3>
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
-                  <th className="pb-2 font-medium">Modelagem</th>
-                  <th className="pb-2 font-medium">Grade</th>
-                  <th className="pb-2 text-right font-medium">Pares</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rel.modelagens.map((m) => (
-                  <tr key={m.modelagem} className="border-b border-slate-800/50">
-                    <td className="py-2 font-semibold">{m.modelagem}</td>
-                    <td className="py-2">
-                      <span className="flex flex-wrap gap-1">
-                        {gradeEmLinhas(m.grade).map((l) => (
-                          <span key={l.tamanho} className="rounded bg-slate-950 px-1.5 py-0.5 text-[11px]">
-                            {l.tamanho} <span className="text-slate-400">{l.qtd}</span>
-                          </span>
-                        ))}
+            <ul className="divide-y divide-slate-800/60">
+              {rel.modelagens.map((m) => (
+                <li key={m.modelagem} className="py-2.5 first:pt-0 last:pb-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 font-bold uppercase tracking-wide">{m.modelagem}</span>
+                    <span className="shrink-0 text-lg font-black tabular-nums text-emerald-400">
+                      {m.total} <span className="text-xs font-semibold text-slate-500">peças</span>
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {gradeEmLinhas(m.grade).map((l) => (
+                      <span key={l.tamanho} className="rounded-md bg-slate-950 px-2 py-1 text-xs">
+                        <span className="font-semibold">{l.tamanho}</span>{' '}
+                        <span className="text-slate-400">{l.qtd}</span>
                       </span>
-                    </td>
-                    <td className="py-2 text-right font-semibold text-emerald-400">{m.total}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
 
           {/* lotes concluídos */}
@@ -236,7 +242,7 @@ export default function RelatorioCortes() {
                         </span>
                       </span>
                       <span className="shrink-0 rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-emerald-400">
-                        {l.resumo.totalPares || 0} pares
+                        {l.resumo.totalPares || 0} peças
                       </span>
                     </button>
 
@@ -251,7 +257,7 @@ export default function RelatorioCortes() {
                         {(l.resumo.modelagens ?? []).map((m) => (
                           <div key={m.modelagem} className="mt-1.5">
                             <span className="font-semibold">{m.modelagem}</span>{' '}
-                            <span className="text-emerald-400">({m.total} pares)</span>
+                            <span className="text-emerald-400">({m.total} peças)</span>
                             <span className="ml-2 inline-flex flex-wrap gap-1">
                               {gradeEmLinhas(m.grade).map((x) => (
                                 <span key={x.tamanho} className="rounded bg-slate-950 px-1.5 py-0.5 text-[11px]">
