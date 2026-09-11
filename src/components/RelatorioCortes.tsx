@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useToast } from '../contexts/ToastContext'
 import { supabase } from '../lib/supabase'
 import type { Grade, LoteCorte, ResumoCorte } from '../types'
-import { gradeEmLinhas } from '../utils/corte'
+import { gradeEmLinhas, tamanhoCanonico } from '../utils/corte'
 import { formatarDataHora } from '../utils/tempo'
 
 type Periodo = 'semana' | 'mes' | 'ano' | 'tudo'
@@ -76,7 +76,9 @@ export default function RelatorioCortes() {
         const atual = porModelagem.get(chave) ?? { total: 0, grade: {} }
         atual.total += m.total || 0
         for (const [tam, qtd] of Object.entries(m.grade ?? {})) {
-          atual.grade[tam] = (atual.grade[tam] ?? 0) + (Number(qtd) || 0)
+          // tamanho padronizado: XG de um lote soma com EGG de outro
+          const t = tamanhoCanonico(tam)
+          atual.grade[t] = (atual.grade[t] ?? 0) + (Number(qtd) || 0)
         }
         porModelagem.set(chave, atual)
       }

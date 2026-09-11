@@ -5,11 +5,12 @@ import { useConfirm } from '../contexts/ConfirmContext'
 import { enviarAnexo, urlsAnexos } from '../lib/anexos'
 import { supabase } from '../lib/supabase'
 import type { Anexo, FichaTecnica, Grade } from '../types'
-import { gradeEmLinhas, ordenarTamanhos, totalDaGrade } from '../utils/corte'
+import { canonizarGrade, gradeEmLinhas, ordenarTamanhos, totalDaGrade } from '../utils/corte'
 import type { FichaLida } from '../utils/fichaArquivo'
 import { comprimirImagem } from '../utils/imagem'
 
-const TAMANHOS_PADRAO = ['PP', 'P', 'M', 'G', 'GG', 'XG', 'EGG']
+// XG não aparece: é o mesmo tamanho que EGG, o nome usado na fábrica
+const TAMANHOS_PADRAO = ['PP', 'P', 'M', 'G', 'GG', 'EGG', 'G1', 'G2']
 
 const vazia = (pedidoId: string): Partial<FichaTecnica> => ({
   pedido_id: pedidoId,
@@ -545,32 +546,69 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
             <div className="mt-4">
               <label className="text-xs font-medium text-slate-400">
                 Grade de tamanhos
-                <span className="ml-1 text-slate-600">(cada unidade = 1 par: frente + costa)</span>
+                <span className="ml-1 text-slate-600">(cada número = 1 peça completa)</span>
               </label>
-              <div className="mt-1 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                {ordenarTamanhos([
-                  ...new Set([...TAMANHOS_PADRAO, ...Object.keys(editando.grade ?? {})]),
-                ]).map((t) => (
-                  <div key={t}>
-                    <span className="block text-center text-[11px] font-semibold text-slate-400">{t}</span>
+              {(() => {
+                // XG e EGG são o mesmo tamanho: a grade é lida já unificada
+                const grade = canonizarGrade(editando.grade)
+                const mudar = (chave: string, valor: string) => {
+                  const g: Grade = { ...grade }
+                  const n = parseInt(valor, 10)
+                  if (!n || n <= 0) delete g[chave]
+                  else g[chave] = n
+                  setEditando({ ...editando, grade: g })
+                }
+                const campo = (chave: string, rotulo: string) => (
+                  <div key={chave}>
+                    <span className="block text-center text-[11px] font-semibold text-slate-400">{rotulo}</span>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min={0}
-                      value={(editando.grade as Grade | undefined)?.[t] ?? ''}
-                      onChange={(e) => {
-                        const g: Grade = { ...(editando.grade ?? {}) }
-                        const n = parseInt(e.target.value, 10)
-                        if (!n || n <= 0) delete g[t]
-                        else g[t] = n
-                        setEditando({ ...editando, grade: g })
-                      }}
-                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-center text-sm outline-none focus:border-red-500"
+                      aria-label={`Quantidade ${chave}`}
+                      value={grade[chave] ?? ''}
+                      onChange={(e) => mudar(chave, e.target.value)}
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-1 py-2 text-center text-sm outline-none focus:border-red-500"
                     />
                   </div>
-                ))}
-              </div>
+                )
+                // o que não cabe em Masculino/Feminino (ficha antiga sem sexo,
+                // infantil, baby look…) continua editável, em vez de sumir
+                const padrao = new Set(TAMANHOS_PADRAO.flatMap((t) => [`${t} MASC`, `${t} FEM`]))
+                const outros = ordenarTamanhos(Object.keys(grade).filter((k) => !padrao.has(k)))
+                const secoes: [string, 'MASC' | 'FEM'][] = [
+                  ['Masculino', 'MASC'],
+                  ['Feminino', 'FEM'],
+                ]
+                return (
+                  <div className="mt-1 space-y-2.5">
+                    {secoes.map(([titulo, sexo]) => {
+                      const soma = TAMANHOS_PADRAO.reduce((a, t) => a + (grade[`${t} ${sexo}`] ?? 0), 0)
+                      return (
+                        <div key={sexo} className="rounded-lg border border-slate-800 bg-slate-950/40 p-2.5">
+                          <p className="mb-1.5 flex items-baseline justify-between text-xs font-semibold text-slate-300">
+                            {titulo}
+                            {soma > 0 && <span className="font-normal text-slate-500">{soma} peças</span>}
+                          </p>
+                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+                            {TAMANHOS_PADRAO.map((t) => campo(`${t} ${sexo}`, t))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {outros.length > 0 && (
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-2.5">
+                        <p className="mb-1.5 text-xs font-semibold text-slate-300">Outros tamanhos</p>
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                          {outros.map((k) => campo(k, k))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
               <p className="mt-1.5 text-right text-xs text-slate-500">
-                Total: <span className="font-semibold text-slate-300">{totalDaGrade(editando.grade)} pares</span>
+                Total: <span className="font-semibold text-slate-300">{totalDaGrade(editando.grade)} peças</span>
               </p>
             </div>
 

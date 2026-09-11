@@ -1,4 +1,5 @@
 import type { Grade } from '../types'
+import { tamanhoCanonico } from './corte'
 
 // ============================================================
 // Leitura da FICHA TÉCNICA (modelo Supreme) em PDF ou DOCX.
@@ -49,9 +50,10 @@ const CAMPOS: [RegExp, keyof FichaLida][] = [
   [/TIPO\s*DE\s*ESTAMPA\s*:?/i, 'estampa'],
 ]
 
-/** identifica um tamanho: PP, P, M, G, GG, XG, 2, 4 AN, 10 ANOS, 2C, BLM... */
+/** identifica um tamanho: PP, P, M, G, GG, XG, EGG, G1, 2, 4 AN, 10 ANOS, 2C, BLM... */
 export const ehTamanho = (t: string) =>
-  /^(PP|P|M|G|GG|XG|XGG|EG|EGG|BL[PMG]|\d{1,2}\s*(AN(OS)?|C)?)$/i.test(t.trim()) && !/^\d{3,}$/.test(t.trim())
+  /^(PP|P|M|G|GG|XG|XGG|EG|EGG|G[1-3]|BL[PMG]|\d{1,2}\s*(AN(OS)?|C)?)$/i.test(t.trim()) &&
+  !/^\d{3,}$/.test(t.trim())
 
 const ehNumero = (t: string) => /^\d{1,4}$/.test(t.trim())
 
@@ -115,7 +117,8 @@ const ehTituloGenerico = (t: string) => {
 const tecidoDeTexto = (t: string): string =>
   t.match(/TECIDO[^:]*:\s*(.+)/i)?.[1]?.trim() ?? ''
 
-const normalizaTamanho = (t: string) => t.trim().toUpperCase().replace(/\s+/g, ' ')
+// grava o tamanho já padronizado (XG entra como EGG, o nome usado na fábrica)
+const normalizaTamanho = tamanhoCanonico
 const ehInfantil = (t: string) => /AN|C$/i.test(t.trim())
 
 const somaGrade = (g: Grade) => Object.values(g).reduce((a, b) => a + b, 0)

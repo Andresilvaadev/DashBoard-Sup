@@ -8,9 +8,39 @@ import type { FichaTecnica, Grade, PartesCorte } from '../types'
 
 /** Ordem natural dos tamanhos; desconhecidos vão para o fim, em ordem alfabética. */
 const ORDEM_TAMANHOS = [
-  'PP', 'P', 'M', 'G', 'GG', 'XG', 'XGG', 'EG', 'EGG',
+  'PP', 'P', 'M', 'G', 'GG', 'XG', 'XGG', 'EG', 'EGG', 'G1', 'G2', 'G3',
   '1', '2', '4', '6', '8', '10', '12', '14', '16',
 ]
+
+/**
+ * Tamanhos que a fábrica trata como o mesmo. A ficha pode escrever um ou
+ * outro, e o corte precisa somar os dois na mesma linha.
+ */
+const SINONIMOS_TAMANHO: Record<string, string> = { XG: 'EGG' }
+
+/**
+ * Nome padrão de um tamanho: maiúsculas, espaço único e sinônimos
+ * unificados, preservando o sexo. "xg  masc" → "EGG MASC".
+ */
+export function tamanhoCanonico(t: string): string {
+  const s = t.trim().toUpperCase().replace(/\s+/g, ' ')
+  const m = s.match(/^(.*?)(\s+(?:MASC|FEM))?$/)
+  const base = m?.[1] ?? s
+  const sexo = m?.[2] ?? ''
+  return (SINONIMOS_TAMANHO[base] ?? base) + sexo
+}
+
+/** Grade com os tamanhos padronizados: sinônimos somam na mesma chave. */
+export function canonizarGrade(grade: Grade | null | undefined): Grade {
+  const saida: Grade = {}
+  for (const [t, q] of Object.entries(grade ?? {})) {
+    const n = Number(q) || 0
+    if (n <= 0) continue
+    const k = tamanhoCanonico(t)
+    saida[k] = (saida[k] ?? 0) + n
+  }
+  return saida
+}
 
 /** separa "M MASC" em base "M" + sexo "MASC" (para ordenar corretamente) */
 function partes(t: string): { base: string; sexo: string } {
@@ -60,11 +90,14 @@ export const somarPecas = (
   porPedido: Map<string, number>,
 ): number => pedidos.reduce((total, p) => total + (porPedido.get(p.id) ?? 0), 0)
 
-/** Grade em linhas ordenadas, pronta para exibir/imprimir. */
+/**
+ * Grade em linhas ordenadas, pronta para exibir/imprimir. Já unifica os
+ * sinônimos: uma ficha antiga com XG aparece (e soma) como EGG.
+ */
 export function gradeEmLinhas(grade: Grade | null | undefined): { tamanho: string; qtd: number }[] {
-  const g = grade ?? {}
+  const g = canonizarGrade(grade)
   return ordenarTamanhos(Object.keys(g))
-    .map((t) => ({ tamanho: t, qtd: Number(g[t]) || 0 }))
+    .map((t) => ({ tamanho: t, qtd: g[t] }))
     .filter((l) => l.qtd > 0)
 }
 
@@ -350,7 +383,8 @@ export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
     for (const [tam, qtd] of Object.entries(f.grade ?? {})) {
       const n = Number(qtd) || 0
       if (n <= 0) continue
-      const t = tam.trim().toUpperCase()
+      // tamanho padronizado: XG de uma ficha soma com EGG de outra
+      const t = tamanhoCanonico(tam)
       grupo.grade[t] = (grupo.grade[t] ?? 0) + n
       if (longa) grupo.mangaLonga[t] = (grupo.mangaLonga[t] ?? 0) + n
       if (punho) grupo.comPunho[t] = (grupo.comPunho[t] ?? 0) + n
