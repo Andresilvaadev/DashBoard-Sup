@@ -10,7 +10,7 @@ import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Profile } from '../types'
 import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
-import { formatarDataHora, formatarDuracao, hojeISO } from '../utils/tempo'
+import { formatarDataHora, formatarDuracao, hojeISO, segundosUteis } from '../utils/tempo'
 
 export default function Dashboard() {
   const { profile } = useAuth()
@@ -86,10 +86,11 @@ export default function Dashboard() {
     const pecasTotal = somarPecas(concluidos, porPedido)
     // pedidos concluídos que ainda não têm ficha: o total sai subestimado
     const semFicha = concluidos.filter((p) => !porPedido.has(p.id)).length
+    // em dias úteis: fim de semana parado não é tempo de produção
     const tempoMedioProducao =
       concluidos.length > 0
         ? concluidos.reduce(
-            (acc, p) => acc + (new Date(p.concluido_em!).getTime() - new Date(p.created_at).getTime()) / 1000,
+            (acc, p) => acc + segundosUteis(p.created_at, p.concluido_em!),
             0,
           ) / concluidos.length
         : null
@@ -411,7 +412,7 @@ export default function Dashboard() {
               <dt className="text-slate-400">
                 Tempo médio de produção
                 <span className="block text-xs text-slate-500">
-                  da criação à entrega · histórico completo
+                  criação → entrega, em dias úteis · histórico completo
                 </span>
               </dt>
               <dd className="font-semibold">{formatarDuracao(stats.tempoMedioProducao)}</dd>

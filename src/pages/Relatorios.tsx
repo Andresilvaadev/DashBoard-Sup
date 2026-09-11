@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Pedido, Perda } from '../types'
 import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
 import type { TabelaExport } from '../utils/exportar'
-import { formatarData, formatarDataHora, formatarDuracao } from '../utils/tempo'
+import { diasUteisAteHoje, formatarData, formatarDataHora, formatarDuracao, segundosUteis } from '../utils/tempo'
 
 type Periodo = 'hoje' | 'semana' | 'mes' | 'semestre' | 'ano'
 
@@ -297,14 +297,17 @@ export default function Relatorios() {
 
     const setorTop = [...porEtapa].sort((a, b) => b.qtd - a.qtd)[0]
 
+    // em dias úteis: fim de semana parado não é tempo de produção
     const tempoMedioProducao = concluidos.length
       ? concluidos.reduce(
-          (acc, p) => acc + (new Date(p.concluido_em!).getTime() - new Date(p.created_at).getTime()) / 1000,
+          (acc, p) => acc + segundosUteis(p.created_at, p.concluido_em!),
           0,
         ) / concluidos.length
       : null
 
-    const dias = Math.max(1, Math.ceil((Date.now() - inicio.getTime()) / 86_400_000))
+    // divisor das médias "por dia" (pedidos/dia e capacidade usada): só os
+    // dias úteis — dividir por sábado e domingo parados puxava a média para baixo
+    const dias = diasUteisAteHoje(inicio)
     const mediaDiaria = concluidos.length / dias
 
     // apenas metas gerais (etapa_id null) — metas de etapa têm comparação própria
@@ -418,10 +421,10 @@ export default function Relatorios() {
         ['Média de peças por pedido', rel.mediaPecasPorPedido],
         ['Pedidos concluídos sem ficha técnica', rel.pedidosSemFicha],
         [
-          'Tempo médio de produção (da criação à entrega)',
+          'Tempo médio de produção (criação → entrega, dias úteis)',
           formatarDuracao(rel.tempoMedioProducao),
         ],
-        ['Média diária de produção', rel.mediaDiaria.toFixed(1)],
+        ['Média diária de produção (por dia útil)', rel.mediaDiaria.toFixed(1)],
         ['Meta do período', rel.totalMeta || '—'],
         ['Meta atingida', rel.pctMeta != null ? `${rel.pctMeta}%` : '—'],
         ['Funcionário mais produtivo', rel.rankFunc[0]?.[0] ?? '—'],
@@ -729,10 +732,10 @@ export default function Relatorios() {
             <StatCard
               titulo="Tempo médio de produção"
               valor={formatarDuracao(rel.tempoMedioProducao)}
-              detalhe={`da criação à entrega · ${rel.concluidos.length} entregue(s) ${detalhePeriodo}`}
+              detalhe={`criação → entrega, em dias úteis · ${rel.concluidos.length} entregue(s) ${detalhePeriodo}`}
               cor="text-amber-400"
             />
-            <StatCard titulo="Média diária" valor={rel.mediaDiaria.toFixed(1)} detalhe="pedidos/dia" cor="text-red-400" />
+            <StatCard titulo="Média diária" valor={rel.mediaDiaria.toFixed(1)} detalhe="pedidos por dia útil" cor="text-red-400" />
             <StatCard
               titulo="Meta atingida"
               valor={rel.pctMeta != null ? `${rel.pctMeta}%` : '—'}
