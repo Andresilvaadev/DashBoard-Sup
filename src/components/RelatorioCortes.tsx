@@ -100,12 +100,12 @@ export default function RelatorioCortes() {
         linhas: [
           ['Lotes cortados', rel.comResumo.length],
           ['Pedidos cortados', rel.totalPedidos],
-          ['Total de pares', rel.totalPares],
+          ['Total de peças', rel.totalPares],
         ] as (string | number)[][],
       },
       {
         titulo: 'Cortado por Modelagem',
-        colunas: ['Modelagem', 'Pares', 'Grade'],
+        colunas: ['Modelagem', 'Peças', 'Grade'],
         linhas: rel.modelagens.map((m) => [
           m.modelagem,
           m.total,
@@ -114,7 +114,7 @@ export default function RelatorioCortes() {
       },
       {
         titulo: 'Lotes',
-        colunas: ['Concluído em', 'Responsável', 'Pedidos', 'Pares'],
+        colunas: ['Concluído em', 'Responsável', 'Pedidos', 'Peças'],
         linhas: rel.comResumo.map((l) => [
           formatarDataHora(l.finalizado_em),
           (l.finalizado_por && nomes[l.finalizado_por]) || '—',

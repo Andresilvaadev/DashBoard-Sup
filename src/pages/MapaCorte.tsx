@@ -639,7 +639,7 @@ export default function MapaCorte() {
             </dl>
 
             <div className="mt-4">
-              <p className="text-xs text-slate-500">Grade de tamanhos (pares)</p>
+              <p className="text-xs text-slate-500">Grade de tamanhos (peças)</p>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {gradeEmLinhas(fichaAberta.grade).map((l) => (
                   <span key={l.tamanho} className="rounded-md bg-slate-950 px-2 py-1 text-xs">

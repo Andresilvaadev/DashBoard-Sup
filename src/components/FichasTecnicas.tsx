@@ -285,7 +285,7 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
                     </p>
                   </div>
                   <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-300">
-                    {totalDaGrade(f.grade)} pares
+                    {totalDaGrade(f.grade)} peças
                   </span>
                 </div>
 
@@ -454,7 +454,7 @@ export default function FichasTecnicas({ pedidoId, numeroPedido }: { pedidoId: s
                       className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm font-semibold outline-none focus:border-red-500"
                     />
                     <span className="shrink-0 rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-emerald-400">
-                      {m.total} pares
+                      {m.total} peças
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">

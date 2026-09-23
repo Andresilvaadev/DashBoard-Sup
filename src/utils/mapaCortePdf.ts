@@ -34,7 +34,7 @@ export interface DadosMapaCorte {
 
 /**
  * Gera o PDF do Mapa de Corte: cabeçalho do lote, cada modelagem com a
- * grade somada, o total de pares, a miniatura do Layout de Corte e as
+ * grade somada, o total de peças, a miniatura do Layout de Corte e as
  * observações das fichas.
  */
 export async function gerarPdfMapaCorte(d: DadosMapaCorte) {
@@ -63,7 +63,7 @@ export async function gerarPdfMapaCorte(d: DadosMapaCorte) {
     doc.text(g.modelagem.toUpperCase(), 14, y)
     doc.setFontSize(10)
     doc.setTextColor(90)
-    doc.text(`Total: ${g.total} pares`, larguraPagina - 14, y, { align: 'right' })
+    doc.text(`Total: ${g.total} peças`, larguraPagina - 14, y, { align: 'right' })
 
     // Especificações do corte (tecido, gola, punho…) logo abaixo do título:
     // é o que a cortadeira precisa conferir antes de cortar.
@@ -101,7 +101,7 @@ export async function gerarPdfMapaCorte(d: DadosMapaCorte) {
 
     autoTable(doc, {
       startY: y + 3,
-      head: [['Tamanho', 'Pares', ...extras.map((e) => e.titulo)]],
+      head: [['Tamanho', 'Peças', ...extras.map((e) => e.titulo)]],
       body: gradeEmLinhas(g.grade).map((l) => [
         l.tamanho,
         String(l.qtd),
