@@ -146,6 +146,10 @@ export interface GrupoCorte {
   comPunho: Grade
   /** total de peças com punho no grupo */
   totalComPunho: number
+  /** quantas peças de cada tamanho são regata (sem manga) */
+  regata: Grade
+  /** total de regatas no grupo */
+  totalRegata: number
   /** o que se marca como cortado neste grupo (camisa tem manga; shorts não) */
   partes: ParteCorte[]
   /** fichas que compõem o grupo (para abrir a ficha completa) */
@@ -314,6 +318,14 @@ const ehMangaLonga = (f: FichaTecnica): boolean => {
   return /LONGA/i.test(String(f.manga ?? ''))
 }
 
+/**
+ * Regata é corpo da mesma modelagem (a gola manda), só não leva manga.
+ * Corta junto com as outras camisas do grupo, mas quem está na mesa precisa
+ * saber quantas daquelas são regata.
+ */
+const ehRegata = (f: FichaTecnica): boolean =>
+  /REGATA/i.test(String(f.modelagem ?? '') + ' ' + String(f.manga ?? ''))
+
 /** Punho é peça à parte no corte, então conta igual à manga longa. */
 const temPunho = (f: FichaTecnica): boolean =>
   String(f.punho ?? '').trim() !== '' && punhoSimNao(String(f.punho)) === 'Sim'
@@ -333,12 +345,6 @@ export function familiaDeCorte(f: FichaTecnica): {
   // shorts, calção e bermuda cortam juntos, venham do pedido que vierem
   if (PECAS_DE_BAIXO.test(modelagem))
     return { chave: 'BAIXO', rotulo: 'Shorts', partes: PARTES_INTEIRAS('Shorts') }
-
-  // Regata é outra modelagem, não um modelo de manga: não tem manga e a cava
-  // é diferente, então não pode ser somada com as camisas da mesma gola.
-  // Marcador único, porque não há manga para cortar.
-  if (/REGATA/i.test(modelagem + ' ' + (f.manga ?? '')))
-    return { chave: 'REGATA', rotulo: 'Regata', partes: PARTES_INTEIRAS('Regatas') }
 
   const gola = String(f.gola ?? '').trim()
   if (gola) {
@@ -379,6 +385,8 @@ export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
         totalMangaLonga: 0,
         comPunho: {},
         totalComPunho: 0,
+        regata: {},
+        totalRegata: 0,
         partes,
         fichas: [],
         layoutAnexoId: null,
@@ -386,6 +394,7 @@ export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
       } satisfies GrupoCorte)
     const longa = ehMangaLonga(f)
     const punho = temPunho(f)
+    const regata = ehRegata(f)
     for (const [tam, qtd] of Object.entries(f.grade ?? {})) {
       const n = Number(qtd) || 0
       if (n <= 0) continue
@@ -394,6 +403,7 @@ export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
       grupo.grade[t] = (grupo.grade[t] ?? 0) + n
       if (longa) grupo.mangaLonga[t] = (grupo.mangaLonga[t] ?? 0) + n
       if (punho) grupo.comPunho[t] = (grupo.comPunho[t] ?? 0) + n
+      if (regata) grupo.regata[t] = (grupo.regata[t] ?? 0) + n
     }
     grupo.fichas.push(f)
     if (!grupo.layoutAnexoId && f.layout_anexo_id) {
@@ -406,6 +416,7 @@ export function agruparParaCorte(fichas: FichaTecnica[]): GrupoCorte[] {
     g.total = totalDaGrade(g.grade)
     g.totalMangaLonga = totalDaGrade(g.mangaLonga)
     g.totalComPunho = totalDaGrade(g.comPunho)
+    g.totalRegata = totalDaGrade(g.regata)
   }
   return [...mapa.values()].sort((a, b) => a.modelagem.localeCompare(b.modelagem, 'pt-BR'))
 }

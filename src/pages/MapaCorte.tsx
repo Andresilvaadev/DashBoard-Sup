@@ -300,6 +300,7 @@ export default function MapaCorte() {
   // resumo do lote: o que interessa de relance antes de começar a cortar
   const totalMangaLonga = grupos?.reduce((a, g) => a + g.totalMangaLonga, 0) ?? 0
   const totalComPunho = grupos?.reduce((a, g) => a + g.totalComPunho, 0) ?? 0
+  const totalRegata = grupos?.reduce((a, g) => a + g.totalRegata, 0) ?? 0
   const pctProgresso = progresso.total ? Math.round((progresso.feitos / progresso.total) * 100) : 0
   const pedidosDoLote = lote ? pedidos.filter((p) => lote.pedido_ids.includes(p.id)) : []
   const todosMarcados = disponiveis.length > 0 && disponiveis.every((p) => selecionados.has(p.id))
@@ -534,9 +535,10 @@ export default function MapaCorte() {
             [
               ['Peças no lote', totalGeral, 'text-emerald-400'],
               ['Modelagens', grupos.length, 'text-slate-100'],
-              ['Manga longa', totalMangaLonga, 'text-amber-300'],
-              ['Com punho', totalComPunho, 'text-sky-300'],
-            ] as const
+              ...(totalMangaLonga > 0 ? [['Manga longa', totalMangaLonga, 'text-amber-300']] : []),
+              ...(totalComPunho > 0 ? [['Com punho', totalComPunho, 'text-sky-300']] : []),
+              ...(totalRegata > 0 ? [['Regatas', totalRegata, 'text-fuchsia-300']] : []),
+            ] as [string, number, string][]
           ).map(([rotulo, valor, cor]) => (
             <div key={rotulo} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3">
               <p className={`text-3xl font-black leading-none tabular-nums ${valor > 0 ? cor : 'text-slate-600'}`}>

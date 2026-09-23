@@ -96,6 +96,8 @@ export async function gerarPdfMapaCorte(d: DadosMapaCorte) {
       extras.push({ titulo: 'M. longa', grade: g.mangaLonga, total: g.totalMangaLonga })
     if (g.totalComPunho > 0)
       extras.push({ titulo: 'Punho', grade: g.comPunho, total: g.totalComPunho })
+    if (g.totalRegata > 0)
+      extras.push({ titulo: 'Regata', grade: g.regata, total: g.totalRegata })
 
     autoTable(doc, {
       startY: y + 3,

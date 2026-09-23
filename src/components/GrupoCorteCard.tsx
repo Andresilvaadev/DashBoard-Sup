@@ -65,7 +65,7 @@ export default function GrupoCorteCard({
           </div>
         </div>
 
-        {(comLote || g.totalMangaLonga > 0 || g.totalComPunho > 0) && (
+        {(comLote || g.totalMangaLonga > 0 || g.totalComPunho > 0 || g.totalRegata > 0) && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {comLote && (
               <span
@@ -90,6 +90,14 @@ export default function GrupoCorteCard({
                 className="rounded-full bg-sky-500/15 px-2.5 py-1 text-xs font-bold text-sky-300 ring-1 ring-sky-500/40"
               >
                 {g.totalComPunho} com punho
+              </span>
+            )}
+            {g.totalRegata > 0 && (
+              <span
+                title="Do total, quantas peças são regata (mesma gola, sem manga)"
+                className="rounded-full bg-fuchsia-500/15 px-2.5 py-1 text-xs font-bold text-fuchsia-300 ring-1 ring-fuchsia-500/40"
+              >
+                {g.totalRegata} regata{g.totalRegata > 1 ? 's' : ''}
               </span>
             )}
           </div>
@@ -173,6 +181,7 @@ export default function GrupoCorteCard({
             const cortado = comLote && g.partes.every((x) => partes[x.campo])
             const longa = g.mangaLonga[l.tamanho] ?? 0
             const punho = g.comPunho[l.tamanho] ?? 0
+            const regata = g.regata[l.tamanho] ?? 0
             return (
               <li
                 key={l.tamanho}
@@ -195,7 +204,7 @@ export default function GrupoCorteCard({
                   >
                     {l.qtd}
                   </p>
-                  {(longa > 0 || punho > 0) && (
+                  {(longa > 0 || punho > 0 || regata > 0) && (
                     <p className="mt-1 flex flex-wrap gap-1">
                       {longa > 0 && (
                         <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold text-amber-300">
@@ -205,6 +214,11 @@ export default function GrupoCorteCard({
                       {punho > 0 && (
                         <span className="rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-bold text-sky-300">
                           {punho} punho
+                        </span>
+                      )}
+                      {regata > 0 && (
+                        <span className="rounded-md bg-fuchsia-500/15 px-1.5 py-0.5 text-[11px] font-bold text-fuchsia-300">
+                          {regata} regata
                         </span>
                       )}
                     </p>
@@ -251,6 +265,11 @@ export default function GrupoCorteCard({
               <span className="font-bold text-amber-300">{g.totalMangaLonga} m. longa</span>
             )}
             {g.totalComPunho > 0 && <span className="font-bold text-sky-300">{g.totalComPunho} punho</span>}
+            {g.totalRegata > 0 && (
+              <span className="font-bold text-fuchsia-300">
+                {g.totalRegata} regata{g.totalRegata > 1 ? 's' : ''}
+              </span>
+            )}
           </span>
         </div>
       </div>
