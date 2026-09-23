@@ -200,6 +200,12 @@ function nomeModelagem(titulo: string, manga: string): string {
     if (re.test(t)) return nome
   }
 
+  // Regata NÃO é modelo de manga: é outra modelagem (sem manga, com a cava
+  // diferente). A ficha escreve "MODELO DA MANGA: REGATA", e sem isto a peça
+  // virava "Manga Regata" e ia cortar junto com as camisas.
+  const semTitulo = !t || ehTituloGenerico(t)
+  if (/REGATA/i.test(t) || (semTitulo && /REGATA/i.test(manga))) return 'Regata'
+
   if (t && !ehTituloGenerico(t)) return t
   const m = manga.trim()
   if (!m) return t || 'Camisa'

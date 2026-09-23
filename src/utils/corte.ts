@@ -334,6 +334,12 @@ export function familiaDeCorte(f: FichaTecnica): {
   if (PECAS_DE_BAIXO.test(modelagem))
     return { chave: 'BAIXO', rotulo: 'Shorts', partes: PARTES_INTEIRAS('Shorts') }
 
+  // Regata é outra modelagem, não um modelo de manga: não tem manga e a cava
+  // é diferente, então não pode ser somada com as camisas da mesma gola.
+  // Marcador único, porque não há manga para cortar.
+  if (/REGATA/i.test(modelagem + ' ' + (f.manga ?? '')))
+    return { chave: 'REGATA', rotulo: 'Regata', partes: PARTES_INTEIRAS('Regatas') }
+
   const gola = String(f.gola ?? '').trim()
   if (gola) {
     for (const [re, rotulo] of FAMILIAS_GOLA) {
