@@ -83,18 +83,22 @@ export function segundosUteis(inicio: Date | string, fim: Date | string): number
 }
 
 /**
- * Dias úteis de `inicio` até hoje, contando hoje mesmo em andamento.
- * Nunca menos que 1: consultado num sábado, divide por 1 em vez de zero.
+ * Dias úteis entre duas datas, contando os dois extremos.
+ * Nunca menos que 1: num período só de fim de semana, divide por 1 em vez
+ * de zero.
  */
-export function diasUteisAteHoje(inicio: Date): number {
+export function diasUteisEntre(inicio: Date, fim: Date): number {
   const dia = new Date(inicio)
   dia.setHours(0, 0, 0, 0)
-  const hoje = new Date()
-  hoje.setHours(0, 0, 0, 0)
+  const ultimo = new Date(fim)
+  ultimo.setHours(0, 0, 0, 0)
   let n = 0
-  while (dia <= hoje) {
+  while (dia <= ultimo) {
     if (ehDiaUtil(dia)) n++
     dia.setDate(dia.getDate() + 1)
   }
   return Math.max(1, n)
 }
+
+/** Dias úteis de `inicio` até hoje, contando hoje mesmo em andamento. */
+export const diasUteisAteHoje = (inicio: Date): number => diasUteisEntre(inicio, new Date())

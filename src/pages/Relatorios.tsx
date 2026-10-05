@@ -12,7 +12,7 @@ import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
 import type { TabelaExport } from '../utils/exportar'
 import {
   dataLocal,
-  diasUteisAteHoje,
+  diasUteisEntre,
   formatarData,
   formatarDataHora,
   formatarDuracao,
@@ -20,7 +20,7 @@ import {
   segundosUteis,
 } from '../utils/tempo'
 
-type Periodo = 'hoje' | 'semana' | 'mes' | 'semestre' | 'ano'
+type Periodo = 'hoje' | 'semana' | 'mes' | 'semestre' | 'ano' | 'mesEscolhido'
 
 const PERIODOS: { id: Periodo; label: string }[] = [
   { id: 'hoje', label: 'Hoje' },
@@ -49,6 +49,28 @@ function inicioDoPeriodo(p: Periodo): Date {
 }
 
 /**
+ * Começo e fim do período. Os períodos fixos vão até agora (fim = null);
+ * um mês escolhido é fechado dos dois lados, e o fim é o 1º dia do mês
+ * seguinte — exclusivo, para o último dia entrar inteiro.
+ */
+function faixaDoPeriodo(p: Periodo, mes: string): { inicio: Date; fim: Date | null } {
+  if (p !== 'mesEscolhido') return { inicio: inicioDoPeriodo(p), fim: null }
+  const [ano, m] = mes.split('-').map(Number)
+  const inicio = new Date(ano, m - 1, 1)
+  inicio.setHours(0, 0, 0, 0)
+  const fim = new Date(ano, m, 1)
+  fim.setHours(0, 0, 0, 0)
+  return { inicio, fim }
+}
+
+/** "2026-06" vira "Junho de 2026" */
+function nomeDoMes(mes: string): string {
+  const [ano, m] = mes.split('-').map(Number)
+  const t = new Date(ano, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
+/**
  * Busca o histórico em páginas de 1000 linhas. A API do Supabase devolve no
  * máximo 1000 por consulta: num mês de produção o histórico passa disso, e o
  * excedente seria cortado sem aviso — a produção do mês sairia por baixo.
@@ -57,14 +79,15 @@ async function historicoPaginado(
   colunas: string,
   campo: 'entrada' | 'saida',
   desde: string,
+  /** fim exclusivo; sem ele, vai até agora */
+  ate?: string | null,
 ): Promise<Historico[]> {
   const PAGINA = 1000
   const tudo: Historico[] = []
   for (let inicio = 0; ; inicio += PAGINA) {
-    const { data, error } = await supabase
-      .from('historico')
-      .select(colunas)
-      .gte(campo, desde)
+    let consulta = supabase.from('historico').select(colunas).gte(campo, desde)
+    if (ate) consulta = consulta.lt(campo, ate)
+    const { data, error } = await consulta
       // ordem fixa: sem ela, as páginas podem repetir ou pular linhas
       .order(campo, { ascending: true })
       .order('id', { ascending: true })
@@ -81,6 +104,8 @@ export default function Relatorios() {
   const etapasCaneca = etapasDoFluxo('caneca')
   const { capacidadeDiaria } = useConfig()
   const [periodo, setPeriodo] = useState<Periodo>('semana')
+  // mês escolhido no seletor (aaaa-mm); começa no mês atual
+  const [mes, setMes] = useState(() => dataLocal(new Date()).slice(0, 7))
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [historico, setHistorico] = useState<Historico[]>([])
   // passagens por etapa TERMINADAS no período (saída dentro dele), não
@@ -97,7 +122,9 @@ export default function Relatorios() {
   >(null)
 
   useEffect(() => {
-    const inicio = inicioDoPeriodo(periodo).toISOString()
+    const faixa = faixaDoPeriodo(periodo, mes)
+    const inicio = faixa.inicio.toISOString()
+    const fim = faixa.fim ? faixa.fim.toISOString() : null
     const inicioData = dataLocal(inicio)
     setCarregando(true)
     Promise.all([
@@ -107,16 +134,25 @@ export default function Relatorios() {
         'entrada, saida, etapa_id, pedido_id, funcionario:profiles(id, nome)',
         'entrada',
         inicio,
+        fim,
       ),
       // Produção por etapa conta pelo fim do trabalho: uma costura que
       // começou sexta e terminou segunda é da semana de segunda. Filtrar
       // só pela entrada (a consulta acima) deixava essas de fora.
-      historicoPaginado('etapa_id, pedido_id, saida', 'saida', inicio),
-      supabase.from('metas').select('*').gte('data', inicioData),
-      supabase
-        .from('perdas')
-        .select('*, funcionario:profiles(id, nome)')
-        .gte('created_at', inicio),
+      historicoPaginado('etapa_id, pedido_id, saida', 'saida', inicio, fim),
+      fim
+        ? supabase.from('metas').select('*').gte('data', inicioData).lt('data', dataLocal(fim))
+        : supabase.from('metas').select('*').gte('data', inicioData),
+      fim
+        ? supabase
+            .from('perdas')
+            .select('*, funcionario:profiles(id, nome)')
+            .gte('created_at', inicio)
+            .lt('created_at', fim)
+        : supabase
+            .from('perdas')
+            .select('*, funcionario:profiles(id, nome)')
+            .gte('created_at', inicio),
       supabase.from('fichas_tecnicas').select('pedido_id, grade'),
     ]).then(([p, h, sd, m, pr, fic]) => {
       setPedidos((p.data as Pedido[]) ?? [])
@@ -127,21 +163,25 @@ export default function Relatorios() {
       setFichas((fic.data as FichaContagem[]) ?? [])
       setCarregando(false)
     })
-  }, [periodo])
+  }, [periodo, mes])
 
   const rel = useMemo(() => {
-    const inicio = inicioDoPeriodo(periodo)
+    const { inicio, fim } = faixaDoPeriodo(periodo, mes)
     const inicioISO = inicio.toISOString()
+    const fimISO = fim ? fim.toISOString() : null
+    /** a data caiu dentro do período? (mês escolhido fecha as duas pontas) */
+    const dentro = (iso: string | null | undefined) =>
+      Boolean(iso) && iso! >= inicioISO && (!fimISO || iso! < fimISO)
 
     const iniciados = pedidos
-      .filter((p) => p.created_at >= inicioISO)
+      .filter((p) => dentro(p.created_at))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
     // Exige o status, e não só a data: um pedido que foi concluído e depois
     // reaberto deve sair da conta. O app limpa concluido_em ao trocar o
     // status, mas uma alteração feita direto no banco não passa por ele —
     // sem esta checagem, o pedido continuaria contando como produzido.
     const concluidos = pedidos
-      .filter((p) => p.status === 'concluido' && p.concluido_em && p.concluido_em >= inicioISO)
+      .filter((p) => p.status === 'concluido' && dentro(p.concluido_em))
       .sort((a, b) => b.concluido_em!.localeCompare(a.concluido_em!))
     const emAndamento = pedidos
       .filter((p) => p.status === 'em_andamento')
@@ -153,11 +193,11 @@ export default function Relatorios() {
       .filter((p) => p.data_prevista && p.data_prevista < hoje)
       .sort((a, b) => a.data_prevista!.localeCompare(b.data_prevista!))
     const cancelados = pedidos
-      .filter((p) => p.status === 'cancelado' && p.cancelado_em && p.cancelado_em >= inicioISO)
+      .filter((p) => p.status === 'cancelado' && dentro(p.cancelado_em))
       .sort((a, b) => b.cancelado_em!.localeCompare(a.cancelado_em!))
     // arquivados = guardados sem terem sido concluídos (não contam como produção)
     const arquivados = pedidos
-      .filter((p) => p.status === 'arquivado' && p.arquivado_em && p.arquivado_em >= inicioISO)
+      .filter((p) => p.status === 'arquivado' && dentro(p.arquivado_em))
       .sort((a, b) => b.arquivado_em!.localeCompare(a.arquivado_em!))
 
     // Peças produzidas: soma as grades das fichas técnicas dos pedidos
@@ -322,7 +362,9 @@ export default function Relatorios() {
 
     // divisor das médias "por dia" (pedidos/dia e capacidade usada): só os
     // dias úteis — dividir por sábado e domingo parados puxava a média para baixo
-    const dias = diasUteisAteHoje(inicio)
+    // num mês fechado, divide pelos dias úteis DAQUELE mês, não até hoje
+    const ultimoDia = fim ? new Date(fim.getTime() - 86_400_000) : new Date()
+    const dias = diasUteisEntre(inicio, ultimoDia)
     const mediaDiaria = concluidos.length / dias
 
     // apenas metas gerais (etapa_id null) — metas de etapa têm comparação própria
@@ -413,12 +455,18 @@ export default function Relatorios() {
       pedidosSemFicha,
       mediaPecasPorPedido,
     }
-  }, [pedidos, historico, saidas, metas, perdas, fichas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo])
+  }, [pedidos, historico, saidas, metas, perdas, fichas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo, mes])
 
-  const labelPeriodo = PERIODOS.find((p) => p.id === periodo)!.label
-  /** "esta semana", "nos últimos 6 meses" — para caber no meio de uma frase */
+  const labelPeriodo =
+    periodo === 'mesEscolhido' ? nomeDoMes(mes) : (PERIODOS.find((p) => p.id === periodo)?.label ?? '')
+  /** "esta semana", "em junho de 2026" — para caber no meio de uma frase */
   const detalhePeriodo =
-    periodo === 'semestre' ? 'nos últimos 6 meses' : labelPeriodo.toLowerCase()
+    periodo === 'mesEscolhido'
+      ? `em ${labelPeriodo.toLowerCase()}`
+      : periodo === 'semestre'
+        ? 'nos últimos 6 meses'
+        : labelPeriodo.toLowerCase()
+  const nomeArquivo = `relatorio-${periodo === 'mesEscolhido' ? mes : periodo}`
 
   const montarTabelas = (): TabelaExport[] => [
     {
@@ -521,7 +569,7 @@ export default function Relatorios() {
           <button
             onClick={async () => {
               const { exportarPDF } = await import('../utils/exportar')
-              exportarPDF(`relatorio-${periodo}`, labelPeriodo, montarTabelas())
+              exportarPDF(nomeArquivo, labelPeriodo, montarTabelas())
             }}
             className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium hover:bg-slate-800"
           >
@@ -530,7 +578,7 @@ export default function Relatorios() {
           <button
             onClick={async () => {
               const { exportarExcel } = await import('../utils/exportar')
-              exportarExcel(`relatorio-${periodo}`, montarTabelas())
+              exportarExcel(nomeArquivo, montarTabelas())
             }}
             className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium hover:bg-slate-800"
           >
@@ -554,6 +602,30 @@ export default function Relatorios() {
             {p.label}
           </button>
         ))}
+
+        {/* Mês fechado: para olhar junho, julho… depois que já passaram.
+            Os botões acima vão sempre até hoje; aqui o período tem fim. */}
+        <label
+          className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-colors ${
+            periodo === 'mesEscolhido'
+              ? 'bg-red-600 text-white'
+              : 'border border-slate-700 text-slate-400 hover:bg-slate-800'
+          }`}
+        >
+          Mês
+          <input
+            type="month"
+            value={mes}
+            max={dataLocal(new Date()).slice(0, 7)}
+            onChange={(e) => {
+              if (!e.target.value) return
+              setMes(e.target.value)
+              setPeriodo('mesEscolhido')
+            }}
+            aria-label="Escolher o mês"
+            className="w-[8rem] rounded bg-transparent text-xs font-semibold outline-none [color-scheme:dark]"
+          />
+        </label>
       </div>
 
       {carregando ? (
