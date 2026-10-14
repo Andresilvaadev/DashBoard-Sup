@@ -88,19 +88,22 @@ export default function Layout() {
 
   // Dashboard, Relatórios e Capacidade são telas de gestão: só o admin vê
   const links = [
-    ...(isAdmin ? [{ to: '/', label: 'Dashboard', icone: icones.dashboard }] : []),
+    // Relatórios fica logo ao lado do Dashboard: são as duas telas de
+    // acompanhamento, e na barra do celular ela ficava lá no fim, só
+    // aparecendo depois de arrastar
+    ...(isAdmin
+      ? [
+          { to: '/', label: 'Dashboard', icone: icones.dashboard },
+          { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
+        ]
+      : []),
     { to: '/pedidos', label: 'Pedidos', icone: icones.pedidos },
     { to: '/criacao', label: 'Criação', icone: icones.criacao },
     { to: '/canecas', label: 'Canecas', icone: icones.canecas },
     { to: '/semana', label: 'Semana', icone: icones.semana },
     { to: '/mapa-corte', label: 'Corte', icone: icones.mapaCorte },
     { to: '/arquivo', label: 'Arquivo', icone: icones.arquivo },
-    ...(isAdmin
-      ? [
-          { to: '/relatorios', label: 'Relatórios', icone: icones.relatorios },
-          { to: '/capacidade', label: 'Capacidade', icone: icones.capacidade },
-        ]
-      : []),
+    ...(isAdmin ? [{ to: '/capacidade', label: 'Capacidade', icone: icones.capacidade }] : []),
     { to: '/perdas', label: 'Perdas', icone: icones.perdas },
     { to: '/estoque', label: 'Estoque', icone: icones.estoque },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icone: icones.admin }] : []),

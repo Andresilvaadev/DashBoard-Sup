@@ -702,7 +702,8 @@ export default function Relatorios() {
               setPeriodo('mesEscolhido')
             }}
             aria-label="Escolher o mês"
-            className="w-[8rem] rounded bg-transparent text-xs font-semibold outline-none [color-scheme:dark]"
+            // largura folgada: em 8rem o "outubro de 2026" saía cortado
+            className="w-[10.5rem] rounded bg-transparent text-xs font-semibold outline-none [color-scheme:dark]"
           />
         </label>
       </div>
