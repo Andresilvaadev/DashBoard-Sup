@@ -10,12 +10,18 @@ import { usePedidos } from '../hooks/usePedidos'
 import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Profile } from '../types'
 import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
+import {
+  idsEtapasPronto,
+  pecasProntas,
+  prontoPorPedido,
+  temEtapaDePronto,
+} from '../utils/producao'
 import { dataLocal, formatarDataHora, formatarDuracao, hojeISO, segundosUteis } from '../utils/tempo'
 
 export default function Dashboard() {
   const { profile } = useAuth()
   const { pedidos } = usePedidos()
-  const { etapasAtivas, etapasDoFluxo } = useEtapas()
+  const { etapas, etapasAtivas, etapasDoFluxo } = useEtapas()
   const [historicoHoje, setHistoricoHoje] = useState<Historico[]>([])
   const [saidasHoje, setSaidasHoje] = useState<Historico[]>([])
   const [historicoRecente, setHistoricoRecente] = useState<Historico[]>([])
@@ -23,6 +29,11 @@ export default function Dashboard() {
   const [funcionarios, setFuncionarios] = useState<Profile[]>([])
   // grades das fichas técnicas: base da contagem de peças produzidas
   const [fichas, setFichas] = useState<FichaContagem[]>([])
+  // chegadas nas etapas de "pronto" — quando a peça ficou PRONTA, que não
+  // é quando foi entregue (o cliente pode pagar e retirar no mês seguinte)
+  const [prontos, setProntos] = useState<{ pedido_id: string; entrada: string }[]>([])
+  // sobe a cada mudança no histórico, para recarregar as chegadas
+  const [versao, setVersao] = useState(0)
 
   const carregarExtras = async () => {
     const inicioHoje = new Date()
@@ -60,13 +71,49 @@ export default function Dashboard() {
     carregarExtras()
     const canal = supabase
       .channel(`dash-rt-${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'historico' }, carregarExtras)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'historico' }, () => {
+        void carregarExtras()
+        setVersao((v) => v + 1)
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metas' }, carregarExtras)
       .subscribe()
     return () => {
       supabase.removeChannel(canal)
     }
   }, [])
+
+  // Todas as chegadas nas etapas de "pronto" (de qualquer data): sem o
+  // histórico inteiro não dá para saber se hoje foi a PRIMEIRA vez que o
+  // pedido ficou pronto ou se ele já tinha ficado antes.
+  const chavePronto = idsEtapasPronto(etapas).join(',')
+  useEffect(() => {
+    if (!chavePronto) {
+      setProntos([])
+      return
+    }
+    let ativo = true
+    const buscar = async () => {
+      const ids = chavePronto.split(',')
+      const linhas: { pedido_id: string; entrada: string }[] = []
+      // páginas de 1000: a API não devolve mais que isso por consulta
+      for (let inicio = 0; ; inicio += 1000) {
+        const { data } = await supabase
+          .from('historico')
+          .select('pedido_id, entrada')
+          .in('etapa_id', ids)
+          .order('entrada', { ascending: true })
+          .range(inicio, inicio + 999)
+        const lote = (data ?? []) as { pedido_id: string; entrada: string }[]
+        linhas.push(...lote)
+        if (lote.length < 1000) break
+      }
+      if (ativo) setProntos(linhas)
+    }
+    void buscar()
+    return () => {
+      ativo = false
+    }
+  }, [chavePronto, versao])
 
   const stats = useMemo(() => {
     const hoje = hojeISO()
@@ -86,6 +133,15 @@ export default function Dashboard() {
     const porPedido = pecasPorPedido(fichas)
     const pecasHoje = somarPecas(concluidosHoje, porPedido)
     const pecasTotal = somarPecas(concluidos, porPedido)
+
+    // PRODUZIDAS x ENTREGUES: produzida é quando o pedido ficou pronto;
+    // entregue é quando saiu para o cliente. Um pedido pronto em setembro
+    // e retirado em outubro é produção de setembro.
+    const prontoEm = prontoPorPedido(prontos)
+    const produzidasHoje = pecasProntas(prontoEm, porPedido, (iso) => dataLocal(iso) === hoje)
+    const produzidasTotal = pecasProntas(prontoEm, porPedido, () => true)
+    // nomes das etapas são fixos: sem nenhuma etapa de "pronto", avisa
+    const semEtapaPronto = !temEtapaDePronto(etapas)
     // pedidos concluídos que ainda não têm ficha: o total sai subestimado
     const semFicha = concluidos.filter((p) => !porPedido.has(p.id)).length
     // em dias úteis: fim de semana parado não é tempo de produção
@@ -189,13 +245,17 @@ export default function Dashboard() {
       metasEtapas,
       pecasHoje,
       pecasTotal,
+      pecasProduzidasHoje: produzidasHoje.pecas,
+      pedidosProduzidosHoje: produzidasHoje.pedidos,
+      pecasProduzidasTotal: produzidasTotal.pecas,
+      semEtapaPronto,
       semFicha,
       pecasPorEtapaHoje,
       artesHoje,
       canecasHoje,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pedidos, etapasAtivas, historicoHoje, saidasHoje, metasHoje, fichas])
+  }, [pedidos, etapas, etapasAtivas, historicoHoje, saidasHoje, metasHoje, fichas, prontos])
 
   // linha do tempo: movimentações de etapa + cancelamentos, mais recentes primeiro
   const eventos = useMemo(() => {
@@ -239,13 +299,29 @@ export default function Dashboard() {
           valor={stats.atrasados}
           cor={stats.atrasados > 0 ? 'text-rose-400' : 'text-slate-300'}
         />
+        {/* produzidas = ficaram prontas; entregues = saíram para o cliente */}
+        <StatCard
+          titulo="Peças produzidas hoje"
+          valor={stats.pecasProduzidasHoje}
+          detalhe={`${stats.pecasProduzidasTotal} no total · ficaram prontas`}
+          cor="text-emerald-400"
+        />
         <StatCard
           titulo="Peças entregues hoje"
           valor={stats.pecasHoje}
-          detalhe={`${stats.pecasTotal} no total`}
+          detalhe={`${stats.pecasTotal} no total · saíram para o cliente`}
           cor="text-sky-400"
         />
       </div>
+
+      {/* a etapa de "pronto" é achada pelo nome: se ninguém casar, avisa */}
+      {stats.semEtapaPronto && (
+        <p className="text-xs text-amber-400">
+          ⚠️ Não encontrei a etapa de “pronto” no fluxo — as peças produzidas ficam em zero. Em
+          Admin → Fluxo, a etapa final de Pedidos precisa ter “pronto” no nome, e a de Canecas,
+          “conferindo” ou “embalando”.
+        </p>
+      )}
 
       {/* Sem ficha técnica a contagem sai por baixo — avisa em vez de mentir */}
       {stats.semFicha > 0 && (

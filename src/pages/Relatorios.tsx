@@ -9,6 +9,12 @@ import { useEtapas } from '../hooks/useEtapas'
 import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Pedido, Perda } from '../types'
 import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
+import {
+  idsEtapasPronto,
+  pecasProntas,
+  prontoPorPedido,
+  temEtapaDePronto,
+} from '../utils/producao'
 import type { TabelaExport } from '../utils/exportar'
 import {
   dataLocal,
@@ -100,7 +106,7 @@ async function historicoPaginado(
 }
 
 export default function Relatorios() {
-  const { etapasAtivas, etapasCriacao, etapasDoFluxo } = useEtapas()
+  const { etapas, etapasAtivas, etapasCriacao, etapasDoFluxo } = useEtapas()
   const etapasCaneca = etapasDoFluxo('caneca')
   const { capacidadeDiaria } = useConfig()
   const [periodo, setPeriodo] = useState<Periodo>('semana')
@@ -113,6 +119,9 @@ export default function Relatorios() {
   const [saidas, setSaidas] = useState<Historico[]>([])
   const [perdas, setPerdas] = useState<Perda[]>([])
   const [metas, setMetas] = useState<Meta[]>([])
+  // chegadas nas etapas de "pronto": quando a peça ficou PRONTA, que não
+  // é quando foi entregue (o cliente pode pagar e retirar no mês seguinte)
+  const [prontos, setProntos] = useState<{ pedido_id: string; entrada: string }[]>([])
   // grades das fichas técnicas: base da contagem de peças produzidas
   const [fichas, setFichas] = useState<FichaContagem[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -165,6 +174,38 @@ export default function Relatorios() {
     })
   }, [periodo, mes])
 
+  // Todas as chegadas nas etapas de "pronto", de qualquer data: sem o
+  // histórico inteiro não dá para saber se foi a PRIMEIRA vez que o pedido
+  // ficou pronto, e um pedido que voltou contaria em dois meses.
+  const chavePronto = idsEtapasPronto(etapas).join(',')
+  useEffect(() => {
+    if (!chavePronto) {
+      setProntos([])
+      return
+    }
+    let ativo = true
+    const buscar = async () => {
+      const ids = chavePronto.split(',')
+      const linhas: { pedido_id: string; entrada: string }[] = []
+      for (let inicio = 0; ; inicio += 1000) {
+        const { data } = await supabase
+          .from('historico')
+          .select('pedido_id, entrada')
+          .in('etapa_id', ids)
+          .order('entrada', { ascending: true })
+          .range(inicio, inicio + 999)
+        const lote = (data ?? []) as { pedido_id: string; entrada: string }[]
+        linhas.push(...lote)
+        if (lote.length < 1000) break
+      }
+      if (ativo) setProntos(linhas)
+    }
+    void buscar()
+    return () => {
+      ativo = false
+    }
+  }, [chavePronto])
+
   const rel = useMemo(() => {
     const { inicio, fim } = faixaDoPeriodo(periodo, mes)
     const inicioISO = inicio.toISOString()
@@ -200,15 +241,22 @@ export default function Relatorios() {
       .filter((p) => p.status === 'arquivado' && dentro(p.arquivado_em))
       .sort((a, b) => b.arquivado_em!.localeCompare(a.arquivado_em!))
 
-    // Peças produzidas: soma as grades das fichas técnicas dos pedidos
-    // concluídos no período. Um pedido rende N camisas, então a contagem
-    // de pedidos não mostra o volume real de produção.
+    // ENTREGUES: peças dos pedidos entregues (concluídos) no período.
+    // Um pedido rende N camisas, então contar pedidos não mostra volume.
     const porPedido = pecasPorPedido(fichas)
-    const pecasProduzidas = somarPecas(concluidos, porPedido)
+    const pecasEntregues = somarPecas(concluidos, porPedido)
     const pecasEmAndamento = somarPecas(emAndamento, porPedido)
+
+    // PRODUZIDAS: peças que ficaram PRONTAS no período, mesmo que a
+    // entrega só aconteça depois. Pedido pronto em setembro e retirado em
+    // outubro é produção de setembro.
+    const prontoEm = prontoPorPedido(prontos)
+    const produzidas = pecasProntas(prontoEm, porPedido, dentro)
+    // os nomes das etapas são fixos: sem nenhuma etapa de "pronto", avisa
+    const semEtapaPronto = !temEtapaDePronto(etapas)
     const pedidosSemFicha = concluidos.filter((p) => !porPedido.has(p.id)).length
     const mediaPecasPorPedido =
-      concluidos.length > 0 ? Math.round(pecasProduzidas / concluidos.length) : 0
+      concluidos.length > 0 ? Math.round(pecasEntregues / concluidos.length) : 0
 
     // produção por etapa: PEDIDOS ÚNICOS com trabalho concluído na etapa.
     // Ir e voltar de etapa gera vários registros no histórico, mas o mesmo
@@ -448,14 +496,17 @@ export default function Relatorios() {
       pctMeta,
       totalMeta,
       evolucao,
-      pecasProduzidas,
+      pecasEntregues,
+      pecasProduzidas: produzidas.pecas,
+      pedidosProduzidos: produzidas.pedidos,
+      semEtapaPronto,
       pecasEmAndamento,
       artesCriadas,
       canecasProduzidas,
       pedidosSemFicha,
       mediaPecasPorPedido,
     }
-  }, [pedidos, historico, saidas, metas, perdas, fichas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo, mes])
+  }, [pedidos, historico, saidas, prontos, metas, perdas, fichas, etapas, etapasAtivas, etapasCriacao, etapasCaneca, capacidadeDiaria, periodo, mes])
 
   const labelPeriodo =
     periodo === 'mesEscolhido' ? nomeDoMes(mes) : (PERIODOS.find((p) => p.id === periodo)?.label ?? '')
@@ -479,7 +530,8 @@ export default function Relatorios() {
         ['Pedidos atrasados', rel.atrasados.length],
         ['Pedidos arquivados', rel.arquivados.length],
         ['Pedidos cancelados', rel.cancelados.length],
-        ['Peças produzidas', rel.pecasProduzidas],
+        ['Peças produzidas (ficaram prontas)', rel.pecasProduzidas],
+        ['Peças entregues ao cliente', rel.pecasEntregues],
         ['Peças em produção', rel.pecasEmAndamento],
         ['Artes criadas', rel.artesCriadas],
         ['Canecas produzidas', rel.canecasProduzidas],
@@ -648,15 +700,32 @@ export default function Relatorios() {
                 </span>
               </div>
             )}
-            {/* Peças produzidas: o volume real, somando as grades das fichas */}
+            {/* a etapa de "pronto" é achada pelo nome: se nenhuma casar, avisa */}
+            {rel.semEtapaPronto && (
+              <p className="mb-3 text-xs text-amber-400">
+                ⚠️ Não encontrei a etapa de “pronto” no fluxo — as peças produzidas ficam em zero.
+                Em Admin → Fluxo, a etapa final de Pedidos precisa ter “pronto” no nome, e a de
+                Canecas, “conferindo” ou “embalando”.
+              </p>
+            )}
+
+            {/* produzidas = ficaram prontas no período; entregues = saíram
+                para o cliente. Separadas porque o cliente pode pagar e
+                retirar meses depois, e a produção foi lá atrás. */}
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <StatCard
                 titulo="Peças produzidas"
                 valor={rel.pecasProduzidas}
+                detalhe={`${rel.pedidosProduzidos} pedido(s) ficaram prontos`}
+                cor="text-emerald-400"
+              />
+              <StatCard
+                titulo="Peças entregues"
+                valor={rel.pecasEntregues}
                 detalhe={
                   rel.mediaPecasPorPedido > 0
                     ? `média de ${rel.mediaPecasPorPedido} por pedido`
-                    : 'sem ficha técnica no período'
+                    : 'saíram para o cliente'
                 }
                 cor="text-sky-400"
               />
