@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Profile } from '../types'
 import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
 import {
+  etapasPuladas,
   idsEtapasPronto,
   pecasProntas,
   prontoPorPedido,
@@ -178,11 +179,18 @@ export default function Dashboard() {
     // última etapa não há saída, então conta quem chegou nela.
     // Só as etapas marcadas em Admin → Fluxo: etapas de espera não são produção.
     const ultimaOrdemEtapa = Math.max(0, ...etapasAtivas.map((e) => e.ordem))
+    // Etapas puladas: cortar e imprimir ao mesmo tempo e mover direto para
+    // a prensagem faz a impressão contar hoje, mesmo sem o pedido ter
+    // parado nela. Voltar atrás não conta.
+    const puladasHoje = etapasPuladas(historicoHoje, saidasHoje, etapas)
     const pecasPorEtapaHoje = etapasAtivas
       .filter((e) => e.conta_pecas)
       .map((e) => {
         const fonte = e.ordem >= ultimaOrdemEtapa ? historicoHoje : saidasHoje
-        const ids = new Set(fonte.filter((h) => h.etapa_id === e.id).map((h) => h.pedido_id))
+        const ids = new Set([
+          ...fonte.filter((h) => h.etapa_id === e.id).map((h) => h.pedido_id),
+          ...(puladasHoje.get(e.id) ?? []),
+        ])
         return {
           nome: e.nome,
           cor: e.cor,
@@ -334,7 +342,12 @@ export default function Dashboard() {
       {/* Quanto foi cortado, prensado, costurado… hoje */}
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Peças por etapa hoje</h2>
+          <div>
+            <h2 className="text-sm font-semibold">Peças por etapa hoje</h2>
+            <p className="text-[11px] text-slate-500">
+              inclui a etapa que o pedido pulou ao ir direto para a frente
+            </p>
+          </div>
           <div className="flex gap-4 text-xs">
             <span className="text-slate-500">
               Artes prontas <span className="font-bold text-fuchsia-400">{stats.artesHoje}</span>

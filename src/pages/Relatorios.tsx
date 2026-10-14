@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase'
 import type { Historico, Meta, Pedido, Perda } from '../types'
 import { pecasPorPedido, somarPecas, type FichaContagem } from '../utils/corte'
 import {
+  etapasPuladas,
   idsEtapasPronto,
   pecasProntas,
   prontoPorPedido,
@@ -270,10 +271,17 @@ export default function Relatorios() {
     // Pedidos que a etapa entregou no período: quem SAIU dela (trabalho
     // terminado), mesmo tendo entrado antes. A última etapa não tem saída,
     // então lá conta quem chegou. Mesma regra do "Peças por etapa hoje".
+    // Etapas puladas: quando o pedido salta de Corte direto para Prensagem,
+    // a impressão do meio foi feita junto e conta na data do salto. Voltar
+    // atrás não conta nada.
+    const puladas = etapasPuladas(historico, saidas, etapas)
     const pedidosFeitosNaEtapa = (etapaId: string, ultima: boolean) =>
-      new Set(
-        (ultima ? historico : saidas).filter((h) => h.etapa_id === etapaId).map((h) => h.pedido_id),
-      )
+      new Set([
+        ...(ultima ? historico : saidas)
+          .filter((h) => h.etapa_id === etapaId)
+          .map((h) => h.pedido_id),
+        ...(puladas.get(etapaId) ?? []),
+      ])
     const ultimaOrdem = Math.max(0, ...etapasAtivas.map((e) => e.ordem))
     const porEtapa = etapasAtivas.map((e) => {
       // a última etapa nunca tem saída: conta quem chegou nela (entregues)
@@ -971,7 +979,8 @@ export default function Relatorios() {
               <h2 className="text-sm font-semibold">Produção por etapa</h2>
               <p className="mb-3 mt-0.5 text-xs text-slate-500">
                 O que saiu de cada etapa {detalhePeriodo} — trabalho terminado, mesmo que tenha
-                começado antes. Na última etapa, o que chegou.
+                começado antes. Na última etapa, o que chegou. Inclui a etapa que o pedido pulou
+                ao ir direto para a frente (cortar e imprimir ao mesmo tempo, por exemplo).
               </p>
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
