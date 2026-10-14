@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
+import Abas from '../components/Abas'
+import Celula from '../components/Celula'
 import StatCard from '../components/StatCard'
 import { useConfig } from '../hooks/useConfig'
 import { useEtapas } from '../hooks/useEtapas'
@@ -111,6 +113,8 @@ export default function Relatorios() {
   const etapasCaneca = etapasDoFluxo('caneca')
   const { capacidadeDiaria } = useConfig()
   const [periodo, setPeriodo] = useState<Periodo>('semana')
+  // assunto em foco: cada aba responde a uma pergunta
+  const [aba, setAba] = useState<'resumo' | 'producao' | 'pedidos' | 'equipe' | 'criacao'>('resumo')
   // mês escolhido no seletor (aaaa-mm); começa no mês atual
   const [mes, setMes] = useState(() => dataLocal(new Date()).slice(0, 7))
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -694,439 +698,487 @@ export default function Relatorios() {
         </div>
       ) : (
         <>
-          {/* Painel executivo: gargalo, perdas, capacidade e destaques */}
-          <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
-            <h2 className="mb-3 text-sm font-semibold">Resumo executivo — {labelPeriodo.toLowerCase()}</h2>
-            {rel.gargalo && (
-              <div className="mb-3 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2.5 text-sm">
-                <span className="font-semibold text-amber-300">Gargalo identificado: {rel.gargalo.nome}.</span>{' '}
-                <span className="text-slate-300">
-                  Tempo médio: {formatarDuracao(rel.gargalo.tempoMedio)}.
-                </span>{' '}
-                <span className="text-xs text-slate-500">
-                  (etapa de produção mais demorada do período)
-                </span>
-              </div>
-            )}
-            {/* a etapa de "pronto" é achada pelo nome: se nenhuma casar, avisa */}
-            {rel.semEtapaPronto && (
-              <p className="mb-3 text-xs text-amber-400">
-                ⚠️ Não encontrei a etapa de “pronto” no fluxo — as peças produzidas ficam em zero.
-                Em Admin → Fluxo, a etapa final de Pedidos precisa ter “pronto” no nome, e a de
-                Canecas, “conferindo” ou “embalando”.
-              </p>
-            )}
+          <Abas
+            abas={[
+              { id: 'resumo', label: 'Resumo' },
+              { id: 'producao', label: 'Produção' },
+              { id: 'pedidos', label: 'Pedidos', contador: rel.concluidos.length },
+              { id: 'equipe', label: 'Equipe' },
+              { id: 'criacao', label: 'Criação e canecas' },
+            ]}
+            ativa={aba}
+            onMudar={setAba}
+          />
 
-            {/* produzidas = ficaram prontas no período; entregues = saíram
-                para o cliente. Separadas porque o cliente pode pagar e
-                retirar meses depois, e a produção foi lá atrás. */}
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <StatCard
-                titulo="Peças produzidas"
-                valor={rel.pecasProduzidas}
-                detalhe={`${rel.pedidosProduzidos} pedido(s) ficaram prontos`}
-                cor="text-emerald-400"
-              />
-              <StatCard
-                titulo="Peças entregues"
-                valor={rel.pecasEntregues}
-                detalhe={
-                  rel.mediaPecasPorPedido > 0
-                    ? `média de ${rel.mediaPecasPorPedido} por pedido`
-                    : 'saíram para o cliente'
-                }
-                cor="text-sky-400"
-              />
-              <StatCard
-                titulo="Peças em produção"
-                valor={rel.pecasEmAndamento}
-                detalhe="pedidos ainda em andamento"
-                cor="text-amber-400"
-              />
-              <StatCard
-                titulo="Artes criadas"
-                valor={rel.artesCriadas}
-                detalhe="aprovadas na aba Criação"
-                cor="text-fuchsia-400"
-              />
-              <StatCard
-                titulo="Canecas produzidas"
-                valor={rel.canecasProduzidas}
-                detalhe="concluídas na aba Canecas"
-                cor="text-orange-400"
-              />
-            </div>
+          {aba === 'resumo' && (
+            <div className="space-y-4">
+              {/* Um painel com células separadas por fios de 1px. Antes eram
+                  dez cartões dentro de um cartão, todos do mesmo tamanho. */}
+              <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-800">
+                <header className="bg-slate-900 px-4 py-3">
+                  <h2 className="text-sm font-bold">Resumo — {labelPeriodo.toLowerCase()}</h2>
+                </header>
 
-            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <StatCard
-                titulo="Perdas do período"
-                valor={rel.perdasQtd}
-                detalhe={rel.perdasValor > 0 ? rel.perdasValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'sem valor registrado'}
-                cor={rel.perdasQtd > 0 ? 'text-rose-400' : 'text-emerald-400'}
-              />
-              <StatCard
-                titulo="Capacidade utilizada"
-                valor={rel.capacidadeMedia != null ? `${rel.capacidadeMedia}%` : '—'}
-                detalhe={rel.capacidadeMedia == null ? 'defina em Capacidade' : 'média do período'}
-                cor={
-                  rel.capacidadeMedia != null && rel.capacidadeMedia > 100
-                    ? 'text-rose-400'
-                    : rel.capacidadeMedia != null && rel.capacidadeMedia >= 85
-                      ? 'text-amber-400'
-                      : 'text-emerald-400'
-                }
-              />
-              <StatCard
-                titulo="Mais produtivo"
-                valor={<span className="text-base">{rel.rankFunc[0]?.[0] ?? '—'}</span>}
-                detalhe={rel.rankFunc[0] ? `${rel.rankFunc[0][1]} etapas movimentadas` : undefined}
-                cor="text-emerald-400"
-              />
-              <StatCard
-                titulo="Menor índice de perdas"
-                valor={<span className="text-base">{rel.menorIndicePerdas?.nome ?? '—'}</span>}
-                detalhe={rel.menorIndicePerdas ? `${rel.menorIndicePerdas.indice.toFixed(1)}% de perdas` : undefined}
-                cor="text-violet-400"
-              />
-            </div>
-          </div>
+                {rel.gargalo && (
+                  <div className="bg-slate-900 px-4 pb-3 text-sm">
+                    <div className="rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2.5">
+                      <span className="font-semibold text-amber-300">
+                        Gargalo identificado: {rel.gargalo.nome}.
+                      </span>{' '}
+                      <span className="text-slate-300">
+                        Tempo médio: {formatarDuracao(rel.gargalo.tempoMedio)}.
+                      </span>{' '}
+                      <span className="text-xs text-slate-500">
+                        (etapa de produção mais demorada do período)
+                      </span>
+                    </div>
+                  </div>
+                )}
 
-          {/* Produção geral — clique em um card para ver a lista de pedidos */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-            {(
-              [
-                { id: 'iniciados', titulo: 'Iniciados', lista: rel.iniciados, cor: 'text-red-400' },
-                { id: 'concluidos', titulo: 'Concluídos', lista: rel.concluidos, cor: 'text-emerald-400' },
-                { id: 'emAndamento', titulo: 'Em andamento', lista: rel.emAndamento, cor: 'text-violet-400' },
-                {
-                  id: 'atrasados',
-                  titulo: 'Atrasados',
-                  lista: rel.atrasados,
-                  cor: rel.atrasados.length > 0 ? 'text-rose-400' : 'text-slate-300',
-                },
-                { id: 'arquivados', titulo: 'Arquivados', lista: rel.arquivados, cor: 'text-violet-300' },
-                { id: 'cancelados', titulo: 'Cancelados', lista: rel.cancelados, cor: 'text-rose-400' },
-              ] as const
-            ).map((c) => (
-              <div
-                key={c.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setListaAberta((v) => (v === c.id ? null : c.id))}
-                onKeyDown={(e) => e.key === 'Enter' && setListaAberta((v) => (v === c.id ? null : c.id))}
-                className={`cursor-pointer rounded-xl transition-shadow ${
-                  listaAberta === c.id ? 'ring-2 ring-red-500' : 'hover:ring-1 hover:ring-slate-600'
-                }`}
-              >
-                <StatCard
-                  titulo={c.titulo}
-                  valor={c.lista.length}
-                  detalhe={listaAberta === c.id ? 'clique para ocultar' : 'clique para ver a lista'}
-                  cor={c.cor}
-                />
-              </div>
-            ))}
-          </div>
+                {/* a etapa de "pronto" é achada pelo nome: se nenhuma casar, avisa */}
+                {rel.semEtapaPronto && (
+                  <div className="bg-slate-900 px-4 pb-3">
+                    <p className="rounded-lg border border-amber-900/60 bg-amber-950/25 px-3 py-2 text-xs text-amber-300">
+                      Não encontrei a etapa de “pronto” no fluxo — as peças produzidas ficam em zero.
+                      Em Admin → Fluxo, a etapa final de Pedidos precisa ter “pronto” no nome, e a de
+                      Canecas, “conferindo” ou “embalando”.
+                    </p>
+                  </div>
+                )}
 
-          {/* Lista de pedidos do card selecionado */}
-          {listaAberta && (
-            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
-              <h2 className="mb-3 text-sm font-semibold">
-                {
-                  {
-                    iniciados: 'Pedidos iniciados',
-                    concluidos: 'Pedidos concluídos',
-                    emAndamento: 'Pedidos em andamento',
-                    atrasados: 'Pedidos atrasados',
-                    arquivados: 'Pedidos arquivados',
-                    cancelados: 'Pedidos cancelados',
-                  }[listaAberta]
-                }{' '}
-                — {labelPeriodo.toLowerCase()} ({rel[listaAberta].length})
-              </h2>
-              {rel[listaAberta].length === 0 ? (
-                <p className="py-6 text-center text-sm text-slate-500">Nenhum pedido nesta lista.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {rel[listaAberta].map((p) => (
-                    <li key={p.id}>
-                      <Link
-                        to={`/pedidos/${p.numero}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 px-3 py-2.5 text-sm hover:border-slate-500"
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="font-bold text-red-400">#{p.numero}</span>
-                          <span className="truncate">{p.cliente}</span>
-                          <span className="text-xs text-slate-500">{p.quantidade} un.</span>
-                          {(listaAberta === 'emAndamento' || listaAberta === 'atrasados') &&
-                            p.etapa_atual && (
-                              <span
-                                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                                style={{
-                                  background: `${p.etapa_atual.cor}22`,
-                                  color: p.etapa_atual.cor,
-                                }}
-                              >
-                                {p.etapa_atual.nome}
-                              </span>
-                            )}
-                        </span>
-                        <span
-                          className={`text-xs ${listaAberta === 'atrasados' ? 'font-medium text-rose-400' : 'text-slate-500'}`}
-                        >
-                          {listaAberta === 'iniciados' && `criado em ${formatarDataHora(p.created_at)}`}
-                          {listaAberta === 'concluidos' && `concluído em ${formatarDataHora(p.concluido_em)}`}
-                          {listaAberta === 'emAndamento' &&
-                            (p.data_prevista ? `entrega ${formatarData(p.data_prevista)}` : 'sem data de entrega')}
-                          {listaAberta === 'atrasados' && `entrega era ${formatarData(p.data_prevista)}`}
-                          {listaAberta === 'arquivados' && `arquivado em ${formatarDataHora(p.arquivado_em)}`}
-                          {listaAberta === 'cancelados' && `cancelado em ${formatarDataHora(p.cancelado_em)}`}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+                {/* produzidas = ficaram prontas no período; entregues = saíram
+                    para o cliente. O cliente pode pagar e retirar meses depois,
+                    e a produção foi lá atrás. */}
+                <div className="grid grid-cols-2 gap-px border-t border-slate-800 sm:grid-cols-3 lg:grid-cols-5">
+                  <Celula
+                    rotulo="Peças produzidas"
+                    valor={rel.pecasProduzidas}
+                    detalhe={`${rel.pedidosProduzidos} pedido(s) ficaram prontos`}
+                    cor="text-emerald-400"
+                  />
+                  <Celula
+                    rotulo="Peças entregues"
+                    valor={rel.pecasEntregues}
+                    detalhe={
+                      rel.mediaPecasPorPedido > 0
+                        ? `média de ${rel.mediaPecasPorPedido} por pedido`
+                        : 'saíram para o cliente'
+                    }
+                    cor="text-sky-400"
+                  />
+                  <Celula
+                    rotulo="Peças em produção"
+                    valor={rel.pecasEmAndamento}
+                    detalhe="pedidos ainda em andamento"
+                    cor="text-amber-400"
+                  />
+                  <Celula
+                    rotulo="Artes criadas"
+                    valor={rel.artesCriadas}
+                    detalhe="aprovadas na aba Criação"
+                    cor="text-fuchsia-400"
+                  />
+                  <Celula
+                    rotulo="Canecas produzidas"
+                    valor={rel.canecasProduzidas}
+                    detalhe="concluídas na aba Canecas"
+                    cor="text-orange-400"
+                  />
+                  <Celula
+                    rotulo="Tempo médio"
+                    valor={formatarDuracao(rel.tempoMedioProducao)}
+                    detalhe={`criação → entrega, dias úteis · ${rel.concluidos.length} entregue(s)`}
+                  />
+                  <Celula
+                    rotulo="Média diária"
+                    valor={rel.mediaDiaria.toFixed(1)}
+                    detalhe="pedidos por dia útil"
+                  />
+                  <Celula
+                    rotulo="Meta atingida"
+                    valor={rel.pctMeta != null ? `${rel.pctMeta}%` : '—'}
+                    detalhe={
+                      rel.totalMeta ? `${rel.concluidos.length} de ${rel.totalMeta}` : 'sem metas no período'
+                    }
+                    cor={rel.pctMeta != null && rel.pctMeta >= 100 ? 'text-emerald-400' : 'text-slate-100'}
+                  />
+                  <Celula
+                    rotulo="Perdas"
+                    valor={rel.perdasQtd}
+                    detalhe={
+                      rel.perdasValor > 0
+                        ? rel.perdasValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                        : 'sem valor registrado'
+                    }
+                    cor={rel.perdasQtd > 0 ? 'text-rose-400' : 'text-slate-100'}
+                  />
+                  <Celula
+                    rotulo="Capacidade usada"
+                    valor={rel.capacidadeMedia != null ? `${rel.capacidadeMedia}%` : '—'}
+                    detalhe={rel.capacidadeMedia == null ? 'defina em Capacidade' : 'média do período'}
+                    cor={
+                      rel.capacidadeMedia != null && rel.capacidadeMedia > 100
+                        ? 'text-rose-400'
+                        : rel.capacidadeMedia != null && rel.capacidadeMedia >= 85
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                    }
+                  />
+                </div>
+              </section>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {/* O período escolhe QUAIS pedidos entram; o tempo medido é a vida
-                inteira de cada um (criado → concluído). Um pedido criado há 19
-                dias e entregue nesta semana pesa 19 dias, não 3 — daí a média
-                aqui ser diferente da do Dashboard, que é do histórico todo. */}
-            <StatCard
-              titulo="Tempo médio de produção"
-              valor={formatarDuracao(rel.tempoMedioProducao)}
-              detalhe={`criação → entrega, em dias úteis · ${rel.concluidos.length} entregue(s) ${detalhePeriodo}`}
-              cor="text-amber-400"
-            />
-            <StatCard titulo="Média diária" valor={rel.mediaDiaria.toFixed(1)} detalhe="pedidos por dia útil" cor="text-red-400" />
-            <StatCard
-              titulo="Meta atingida"
-              valor={rel.pctMeta != null ? `${rel.pctMeta}%` : '—'}
-              detalhe={rel.totalMeta ? `${rel.concluidos.length} de ${rel.totalMeta}` : 'Sem metas no período'}
-              cor="text-violet-400"
-            />
-            <StatCard
-              titulo="Mais produtivo"
-              valor={<span className="text-base">{rel.rankFunc[0]?.[0] ?? '—'}</span>}
-              detalhe={rel.setorTop ? `Setor destaque: ${rel.setorTop.nome}` : undefined}
-              cor="text-emerald-400"
-            />
-          </div>
-
-          {/* Evolução */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-3 text-sm font-semibold">Evolução da produção (concluídos)</h2>
-            <div className="h-56">
-              {rel.evolucao.length === 0 ? (
-                <p className="py-16 text-center text-sm text-slate-500">Sem conclusões no período.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={rel.evolucao} margin={{ top: 5, right: 5, bottom: 0, left: -25 }}>
-                    <defs>
-                      <linearGradient id="gradProd" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#ec1c24" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="#ec1c24" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
-                    <XAxis dataKey="rotulo" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                    <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
-                      labelStyle={{ color: '#e2e8f0' }}
-                    />
-                    <Area type="monotone" dataKey="concluidos" name="Concluídos" stroke="#ec1c24" fill="url(#gradProd)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            {/* Produção por etapa */}
+            {/* Evolução */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <h2 className="mb-3 text-sm font-semibold">Produção por etapa</h2>
-              {rel.porEtapa.length === 0 ? (
-                <p className="py-16 text-center text-sm text-slate-500">Nenhuma etapa de produção encontrada.</p>
-              ) : (
-                <div style={{ height: Math.max(220, rel.porEtapa.length * 44) }}>
+              <h2 className="mb-3 text-sm font-semibold">Evolução da produção (concluídos)</h2>
+              <div className="h-56">
+                {rel.evolucao.length === 0 ? (
+                  <p className="py-16 text-center text-sm text-slate-500">Sem conclusões no período.</p>
+                ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={rel.porEtapa} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+                    <AreaChart data={rel.evolucao} margin={{ top: 5, right: 5, bottom: 0, left: -25 }}>
+                      <defs>
+                        <linearGradient id="gradProd" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#ec1c24" stopOpacity={0.5} />
+                          <stop offset="100%" stopColor="#ec1c24" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
-                      <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
-                      <YAxis type="category" dataKey="nome" width={120} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                      <XAxis dataKey="rotulo" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
                       <Tooltip
                         contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
                         labelStyle={{ color: '#e2e8f0' }}
-                        cursor={{ fill: '#1a2455' }}
                       />
-                      <Bar dataKey="qtd" name="Realizadas" radius={[0, 6, 6, 0]}>
-                        {rel.porEtapa.map((e, i) => (
-                          <Cell key={i} fill={e.cor} />
-                        ))}
-                      </Bar>
-                    </BarChart>
+                      <Area type="monotone" dataKey="concluidos" name="Concluídos" stroke="#ec1c24" fill="url(#gradProd)" strokeWidth={2} />
+                    </AreaChart>
                   </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+            </div>
+          )}
+
+          {aba === 'producao' && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {/* Produção por etapa */}
+              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                <h2 className="mb-3 text-sm font-semibold">Produção por etapa</h2>
+                {rel.porEtapa.length === 0 ? (
+                  <p className="py-16 text-center text-sm text-slate-500">Nenhuma etapa de produção encontrada.</p>
+                ) : (
+                  <div style={{ height: Math.max(220, rel.porEtapa.length * 44) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={rel.porEtapa} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
+                        <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="nome" width={120} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                        <Tooltip
+                          contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
+                          labelStyle={{ color: '#e2e8f0' }}
+                          cursor={{ fill: '#1a2455' }}
+                        />
+                        <Bar dataKey="qtd" name="Realizadas" radius={[0, 6, 6, 0]}>
+                          {rel.porEtapa.map((e, i) => (
+                            <Cell key={i} fill={e.cor} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+
+              {/* Tempo médio por etapa */}
+              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+                <h2 className="text-sm font-semibold">Detalhe por etapa</h2>
+                <p className="mb-3 mt-0.5 text-xs text-slate-500">
+                  O que saiu de cada etapa {detalhePeriodo} — trabalho terminado, mesmo que tenha
+                  começado antes. Na última etapa, o que chegou. Inclui a etapa que o pedido pulou
+                  ao ir direto para a frente (cortar e imprimir ao mesmo tempo, por exemplo).
+                </p>
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
+                      <th className="pb-2 font-medium">Etapa</th>
+                      <th className="pb-2 text-right font-medium">Peças</th>
+                      <th className="pb-2 text-right font-medium">Pedidos</th>
+                      <th className="pb-2 text-right font-medium">Meta</th>
+                      <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rel.porEtapa.map((e) => (
+                      <tr key={e.nome} className="border-b border-slate-800/50">
+                        <td className="py-2">
+                          <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
+                          {e.nome}
+                        </td>
+                        <td className="py-2 text-right font-bold text-sky-400">
+                          {e.pecas ?? <span className="font-normal text-slate-700">—</span>}
+                        </td>
+                        <td className="py-2 text-right text-slate-400">{e.qtd}</td>
+                        <td className="py-2 text-right">
+                          {e.meta > 0 ? (
+                            <span className={e.pctMeta! >= 100 ? 'font-medium text-emerald-400' : 'text-slate-300'}>
+                              {e.meta} ({e.pctMeta}%)
+                            </span>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right text-slate-400">{formatarDuracao(e.tempoMedio)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {aba === 'pedidos' && (
+            <div className="space-y-4">
+            {/* Produção geral — clique em um card para ver a lista de pedidos */}
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+              {(
+                [
+                  { id: 'iniciados', titulo: 'Iniciados', lista: rel.iniciados, cor: 'text-red-400' },
+                  { id: 'concluidos', titulo: 'Concluídos', lista: rel.concluidos, cor: 'text-emerald-400' },
+                  { id: 'emAndamento', titulo: 'Em andamento', lista: rel.emAndamento, cor: 'text-violet-400' },
+                  {
+                    id: 'atrasados',
+                    titulo: 'Atrasados',
+                    lista: rel.atrasados,
+                    cor: rel.atrasados.length > 0 ? 'text-rose-400' : 'text-slate-300',
+                  },
+                  { id: 'arquivados', titulo: 'Arquivados', lista: rel.arquivados, cor: 'text-violet-300' },
+                  { id: 'cancelados', titulo: 'Cancelados', lista: rel.cancelados, cor: 'text-rose-400' },
+                ] as const
+              ).map((c) => (
+                <div
+                  key={c.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setListaAberta((v) => (v === c.id ? null : c.id))}
+                  onKeyDown={(e) => e.key === 'Enter' && setListaAberta((v) => (v === c.id ? null : c.id))}
+                  className={`cursor-pointer rounded-xl transition-shadow ${
+                    listaAberta === c.id ? 'ring-2 ring-red-500' : 'hover:ring-1 hover:ring-slate-600'
+                  }`}
+                >
+                  <StatCard
+                    titulo={c.titulo}
+                    valor={c.lista.length}
+                    detalhe={listaAberta === c.id ? 'clique para ocultar' : 'clique para ver a lista'}
+                    cor={c.cor}
+                  />
+                </div>
+              ))}
+            </div>
+            {/* Lista de pedidos do card selecionado */}
+            {listaAberta && (
+              <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+                <h2 className="mb-3 text-sm font-semibold">
+                  {
+                    {
+                      iniciados: 'Pedidos iniciados',
+                      concluidos: 'Pedidos concluídos',
+                      emAndamento: 'Pedidos em andamento',
+                      atrasados: 'Pedidos atrasados',
+                      arquivados: 'Pedidos arquivados',
+                      cancelados: 'Pedidos cancelados',
+                    }[listaAberta]
+                  }{' '}
+                  — {labelPeriodo.toLowerCase()} ({rel[listaAberta].length})
+                </h2>
+                {rel[listaAberta].length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-500">Nenhum pedido nesta lista.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {rel[listaAberta].map((p) => (
+                      <li key={p.id}>
+                        <Link
+                          to={`/pedidos/${p.numero}`}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 px-3 py-2.5 text-sm hover:border-slate-500"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="font-bold text-red-400">#{p.numero}</span>
+                            <span className="truncate">{p.cliente}</span>
+                            <span className="text-xs text-slate-500">{p.quantidade} un.</span>
+                            {(listaAberta === 'emAndamento' || listaAberta === 'atrasados') &&
+                              p.etapa_atual && (
+                                <span
+                                  className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                                  style={{
+                                    background: `${p.etapa_atual.cor}22`,
+                                    color: p.etapa_atual.cor,
+                                  }}
+                                >
+                                  {p.etapa_atual.nome}
+                                </span>
+                              )}
+                          </span>
+                          <span
+                            className={`text-xs ${listaAberta === 'atrasados' ? 'font-medium text-rose-400' : 'text-slate-500'}`}
+                          >
+                            {listaAberta === 'iniciados' && `criado em ${formatarDataHora(p.created_at)}`}
+                            {listaAberta === 'concluidos' && `concluído em ${formatarDataHora(p.concluido_em)}`}
+                            {listaAberta === 'emAndamento' &&
+                              (p.data_prevista ? `entrega ${formatarData(p.data_prevista)}` : 'sem data de entrega')}
+                            {listaAberta === 'atrasados' && `entrega era ${formatarData(p.data_prevista)}`}
+                            {listaAberta === 'arquivados' && `arquivado em ${formatarDataHora(p.arquivado_em)}`}
+                            {listaAberta === 'cancelados' && `cancelado em ${formatarDataHora(p.cancelado_em)}`}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            </div>
+          )}
+
+          {aba === 'equipe' && (
+            <div className="space-y-4">
+              <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-800">
+                <div className="grid grid-cols-1 gap-px sm:grid-cols-3">
+                  <Celula
+                    rotulo="Mais produtivo"
+                    valor={rel.rankFunc[0]?.[0] ?? '—'}
+                    detalhe={rel.rankFunc[0] ? `${rel.rankFunc[0][1]} etapas movimentadas` : undefined}
+                    cor="text-emerald-400"
+                    texto
+                  />
+                  <Celula
+                    rotulo="Menor índice de perdas"
+                    valor={rel.menorIndicePerdas?.nome ?? '—'}
+                    detalhe={
+                      rel.menorIndicePerdas ? `${rel.menorIndicePerdas.indice.toFixed(1)}% de perdas` : undefined
+                    }
+                    cor="text-violet-400"
+                    texto
+                  />
+                  <Celula
+                    rotulo="Setor destaque"
+                    valor={rel.setorTop?.nome ?? '—'}
+                    detalhe={rel.setorTop ? `${rel.setorTop.qtd} pedido(s) no período` : undefined}
+                    cor="text-sky-400"
+                    texto
+                  />
+                </div>
+              </section>
+
+            {/* Ranking de funcionários */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+              <h2 className="mb-3 text-sm font-semibold">Produção por funcionário</h2>
+              {rel.rankFunc.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">Sem movimentações no período.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {rel.rankFunc.map(([nome, qtd], i) => (
+                    <div key={nome}>
+                      <div className="mb-1 flex justify-between text-xs">
+                        <span className="font-medium text-slate-300">
+                          {i === 0 && '★ '}
+                          {nome}
+                        </span>
+                        <span className="text-slate-500">{qtd} etapas</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className="h-full rounded-full bg-emerald-500"
+                          style={{ width: `${(qtd / (rel.rankFunc[0]?.[1] || 1)) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-
-            {/* Tempo médio por etapa */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <h2 className="text-sm font-semibold">Produção por etapa</h2>
-              <p className="mb-3 mt-0.5 text-xs text-slate-500">
-                O que saiu de cada etapa {detalhePeriodo} — trabalho terminado, mesmo que tenha
-                começado antes. Na última etapa, o que chegou. Inclui a etapa que o pedido pulou
-                ao ir direto para a frente (cortar e imprimir ao mesmo tempo, por exemplo).
-              </p>
-              <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
-                    <th className="pb-2 font-medium">Etapa</th>
-                    <th className="pb-2 text-right font-medium">Peças</th>
-                    <th className="pb-2 text-right font-medium">Pedidos</th>
-                    <th className="pb-2 text-right font-medium">Meta</th>
-                    <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rel.porEtapa.map((e) => (
-                    <tr key={e.nome} className="border-b border-slate-800/50">
-                      <td className="py-2">
-                        <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
-                        {e.nome}
-                      </td>
-                      <td className="py-2 text-right font-bold text-sky-400">
-                        {e.pecas ?? <span className="font-normal text-slate-700">—</span>}
-                      </td>
-                      <td className="py-2 text-right text-slate-400">{e.qtd}</td>
-                      <td className="py-2 text-right">
-                        {e.meta > 0 ? (
-                          <span className={e.pctMeta! >= 100 ? 'font-medium text-emerald-400' : 'text-slate-300'}>
-                            {e.meta} ({e.pctMeta}%)
-                          </span>
-                        ) : (
-                          <span className="text-slate-600">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 text-right text-slate-400">{formatarDuracao(e.tempoMedio)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            </div>
-          </div>
-
-          {/* Criação de arte — tempo por etapa (aba Criação) */}
-          {rel.porEtapaCriacao.length > 0 && (
-            <div className="rounded-xl border border-fuchsia-900/60 bg-slate-900 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-fuchsia-300">◆ Criação de arte</h2>
-                <span className="text-xs text-slate-400">
-                  Tempo médio para criar:{' '}
-                  <span className="font-semibold text-slate-200">
-                    {formatarDuracao(rel.tempoMedioCriacao)}
-                  </span>
-                  {rel.totalCriacoes > 0 && ` • ${rel.totalCriacoes} arte(s)`}
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
-                    <th className="pb-2 font-medium">Etapa da criação</th>
-                    <th className="pb-2 text-right font-medium">Pedidos</th>
-                    <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rel.porEtapaCriacao.map((e) => (
-                    <tr key={e.nome} className="border-b border-slate-800/50">
-                      <td className="py-2">
-                        <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
-                        {e.nome}
-                      </td>
-                      <td className="py-2 text-right font-medium">{e.qtd}</td>
-                      <td className="py-2 text-right text-slate-400">{formatarDuracao(e.tempoMedio)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
             </div>
           )}
 
-          {/* Canecas — tempo por etapa */}
-          {rel.porEtapaCaneca.length > 0 && (
-            <div className="rounded-xl border border-cyan-900/60 bg-slate-900 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-cyan-300">◆ Canecas</h2>
-                <span className="text-xs text-slate-400">
-                  Tempo médio de produção:{' '}
-                  <span className="font-semibold text-slate-200">
-                    {formatarDuracao(rel.tempoMedioCaneca)}
+          {aba === 'criacao' && (
+            <div className="space-y-4">
+            {/* Criação de arte — tempo por etapa (aba Criação) */}
+            {rel.porEtapaCriacao.length > 0 && (
+              <div className="rounded-xl border border-fuchsia-900/60 bg-slate-900 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-fuchsia-300">◆ Criação de arte</h2>
+                  <span className="text-xs text-slate-400">
+                    Tempo médio para criar:{' '}
+                    <span className="font-semibold text-slate-200">
+                      {formatarDuracao(rel.tempoMedioCriacao)}
+                    </span>
+                    {rel.totalCriacoes > 0 && ` • ${rel.totalCriacoes} arte(s)`}
                   </span>
-                  {rel.totalCanecas > 0 && ` • ${rel.totalCanecas} caneca(s)`}
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
-                    <th className="pb-2 font-medium">Etapa</th>
-                    <th className="pb-2 text-right font-medium">Pedidos</th>
-                    <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rel.porEtapaCaneca.map((e) => (
-                    <tr key={e.nome} className="border-b border-slate-800/50">
-                      <td className="py-2">
-                        <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
-                        {e.nome}
-                      </td>
-                      <td className="py-2 text-right font-medium">{e.qtd}</td>
-                      <td className="py-2 text-right text-slate-400">{formatarDuracao(e.tempoMedio)}</td>
+                </div>
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
+                      <th className="pb-2 font-medium">Etapa da criação</th>
+                      <th className="pb-2 text-right font-medium">Pedidos</th>
+                      <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            </div>
-          )}
-
-          {/* Ranking de funcionários */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-3 text-sm font-semibold">Produção por funcionário</h2>
-            {rel.rankFunc.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">Sem movimentações no período.</p>
-            ) : (
-              <div className="space-y-2.5">
-                {rel.rankFunc.map(([nome, qtd], i) => (
-                  <div key={nome}>
-                    <div className="mb-1 flex justify-between text-xs">
-                      <span className="font-medium text-slate-300">
-                        {i === 0 && '★ '}
-                        {nome}
-                      </span>
-                      <span className="text-slate-500">{qtd} etapas</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-                      <div
-                        className="h-full rounded-full bg-emerald-500"
-                        style={{ width: `${(qtd / (rel.rankFunc[0]?.[1] || 1)) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  </thead>
+                  <tbody>
+                    {rel.porEtapaCriacao.map((e) => (
+                      <tr key={e.nome} className="border-b border-slate-800/50">
+                        <td className="py-2">
+                          <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
+                          {e.nome}
+                        </td>
+                        <td className="py-2 text-right font-medium">{e.qtd}</td>
+                        <td className="py-2 text-right text-slate-400">{formatarDuracao(e.tempoMedio)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
               </div>
             )}
-          </div>
+            {/* Canecas — tempo por etapa */}
+            {rel.porEtapaCaneca.length > 0 && (
+              <div className="rounded-xl border border-cyan-900/60 bg-slate-900 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-cyan-300">◆ Canecas</h2>
+                  <span className="text-xs text-slate-400">
+                    Tempo médio de produção:{' '}
+                    <span className="font-semibold text-slate-200">
+                      {formatarDuracao(rel.tempoMedioCaneca)}
+                    </span>
+                    {rel.totalCanecas > 0 && ` • ${rel.totalCanecas} caneca(s)`}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
+                      <th className="pb-2 font-medium">Etapa</th>
+                      <th className="pb-2 text-right font-medium">Pedidos</th>
+                      <th className="pb-2 text-right font-medium">Tempo médio (dias úteis)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rel.porEtapaCaneca.map((e) => (
+                      <tr key={e.nome} className="border-b border-slate-800/50">
+                        <td className="py-2">
+                          <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: e.cor }} />
+                          {e.nome}
+                        </td>
+                        <td className="py-2 text-right font-medium">{e.qtd}</td>
+                        <td className="py-2 text-right text-slate-400">{formatarDuracao(e.tempoMedio)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              </div>
+            )}
+            </div>
+          )}
         </>
       )}
     </div>

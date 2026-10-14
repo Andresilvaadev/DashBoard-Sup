@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import StatCard from '../components/StatCard'
+import Abas from '../components/Abas'
 import { useAuth } from '../contexts/AuthContext'
 import { useEtapas } from '../hooks/useEtapas'
 import { usePedidos } from '../hooks/usePedidos'
@@ -21,6 +21,8 @@ import { dataLocal, formatarDataHora, formatarDuracao, hojeISO, segundosUteis } 
 
 export default function Dashboard() {
   const { profile } = useAuth()
+  // assunto em foco: a tela abre no dia e o resto fica a um toque
+  const [aba, setAba] = useState<'hoje' | 'pedidos' | 'equipe' | 'atividade'>('hoje')
   const { pedidos } = usePedidos()
   const { etapas, etapasAtivas, etapasDoFluxo } = useEtapas()
   const [historicoHoje, setHistoricoHoje] = useState<Historico[]>([])
@@ -277,187 +279,256 @@ export default function Dashboard() {
   }, [historicoRecente, pedidos])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold md:text-2xl">Olá, {profile?.nome?.split(' ')[0]}</h1>
         <p className="text-sm text-slate-400">Acompanhamento da produção em tempo real</p>
       </div>
 
-      {/* Cards principais */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard titulo="Em andamento" valor={stats.emAndamento} cor="text-red-400" />
-        <StatCard titulo="Concluídos hoje" valor={stats.concluidosHoje} cor="text-emerald-400" />
-        <StatCard
-          titulo="Meta diária"
-          valor={
-            stats.metaQtd > 0 ? (
-              <>
-                {stats.concluidosHoje}/{stats.metaQtd}
-                <span className="ml-2 text-sm font-medium text-slate-400">({stats.pctMeta}%)</span>
-              </>
-            ) : (
-              '—'
-            )
-          }
-          detalhe={stats.metaQtd === 0 ? 'Nenhuma meta definida para hoje' : undefined}
-          cor="text-violet-400"
-        />
-        <StatCard
-          titulo="Atrasados"
-          valor={stats.atrasados}
-          cor={stats.atrasados > 0 ? 'text-rose-400' : 'text-slate-300'}
-        />
-        {/* produzidas = ficaram prontas; entregues = saíram para o cliente */}
-        <StatCard
-          titulo="Peças produzidas hoje"
-          valor={stats.pecasProduzidasHoje}
-          detalhe={`${stats.pecasProduzidasTotal} no total · ficaram prontas`}
-          cor="text-emerald-400"
-        />
-        <StatCard
-          titulo="Peças entregues hoje"
-          valor={stats.pecasHoje}
-          detalhe={`${stats.pecasTotal} no total · saíram para o cliente`}
-          cor="text-sky-400"
-        />
-      </div>
-
-      {/* a etapa de "pronto" é achada pelo nome: se ninguém casar, avisa */}
-      {stats.semEtapaPronto && (
-        <p className="text-xs text-amber-400">
-          ⚠️ Não encontrei a etapa de “pronto” no fluxo — as peças produzidas ficam em zero. Em
-          Admin → Fluxo, a etapa final de Pedidos precisa ter “pronto” no nome, e a de Canecas,
-          “conferindo” ou “embalando”.
-        </p>
-      )}
-
-      {/* Sem ficha técnica a contagem sai por baixo — avisa em vez de mentir */}
-      {stats.semFicha > 0 && (
-        <p className="text-xs text-amber-400">
-          ⚠️ {stats.semFicha} pedido(s) concluído(s) sem ficha técnica — as peças deles não entram
-          na contagem.
-        </p>
-      )}
-
-      {/* Quanto foi cortado, prensado, costurado… hoje */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-semibold">Peças por etapa hoje</h2>
-            <p className="text-[11px] text-slate-500">
-              inclui a etapa que o pedido pulou ao ir direto para a frente
+      {/* Números do dia: a resposta de relance. Um painel só, com fios de 1px
+          entre as células — seis cartões soltos faziam o olho procurar. */}
+      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-800">
+        <div className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-6">
+          <div className="bg-slate-900 p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Produzidas</p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-emerald-400">
+              {stats.pecasProduzidasHoje}
+            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              peças prontas · {stats.pecasProduzidasTotal} no total
             </p>
           </div>
-          <div className="flex gap-4 text-xs">
-            <span className="text-slate-500">
-              Artes prontas <span className="font-bold text-fuchsia-400">{stats.artesHoje}</span>
-            </span>
-            <span className="text-slate-500">
-              Canecas hoje <span className="font-bold text-orange-400">{stats.canecasHoje}</span>
-            </span>
+          <div className="bg-slate-900 p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Entregues</p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-sky-400">{stats.pecasHoje}</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              peças ao cliente · {stats.pecasTotal} no total
+            </p>
           </div>
-        </div>
-        {stats.pecasPorEtapaHoje.length === 0 && (
-          <p className="py-4 text-center text-xs text-slate-500">
-            Nenhuma etapa marcada para contar peças. Marque em Admin → Fluxo.
-          </p>
-        )}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {stats.pecasPorEtapaHoje.map((e) => (
-            <div
-              key={e.nome}
-              className="rounded-lg border border-slate-800 bg-slate-950/40 p-3"
-              style={{ borderLeft: `3px solid ${e.cor}` }}
+          <div className="bg-slate-900 p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Em andamento</p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-slate-100">{stats.emAndamento}</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">pedidos na produção</p>
+          </div>
+          <div className="bg-slate-900 p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Concluídos</p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-slate-100">
+              {stats.concluidosHoje}
+            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">pedidos hoje</p>
+          </div>
+          <div className="bg-slate-900 p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Atrasados</p>
+            <p
+              className={`mt-1 text-2xl font-black tabular-nums ${
+                stats.atrasados > 0 ? 'text-rose-400' : 'text-slate-600'
+              }`}
             >
-              <p className="truncate text-xs text-slate-400">{e.nome}</p>
-              <p className={`mt-1 text-xl font-bold ${e.pecas > 0 ? 'text-sky-400' : 'text-slate-600'}`}>
-                {e.pecas}
-              </p>
-              <p className="text-[11px] text-slate-600">
-                {e.pedidos} {e.pedidos === 1 ? 'pedido' : 'pedidos'}
-              </p>
-            </div>
-          ))}
+              {stats.atrasados}
+            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">passaram da entrega</p>
+          </div>
+          <div className="bg-slate-900 p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Meta do dia</p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-slate-100">
+              {stats.metaQtd > 0 ? `${stats.concluidosHoje}/${stats.metaQtd}` : '—'}
+            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              {stats.metaQtd > 0 ? `${stats.pctMeta}% atingido` : 'nenhuma meta definida'}
+            </p>
+          </div>
         </div>
-      </div>
+      </section>
 
-      {/* Barra de progresso da meta */}
-      {stats.metaQtd > 0 && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="font-medium">Progresso da meta de hoje</span>
-            <span className="text-slate-400">{stats.pctMeta}%</span>
-          </div>
-          <div className="h-3 overflow-hidden rounded-full bg-slate-800">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-red-700 to-red-400 transition-all"
-              style={{ width: `${Math.min(100, stats.pctMeta ?? 0)}%` }}
-            />
-          </div>
+      {/* avisos: ficam logo abaixo dos números que eles explicam */}
+      {(stats.semEtapaPronto || stats.semFicha > 0) && (
+        <div className="space-y-1.5">
+          {/* a etapa de "pronto" é achada pelo nome: se ninguém casar, avisa */}
+          {stats.semEtapaPronto && (
+            <p className="rounded-lg border border-amber-900/60 bg-amber-950/25 px-3 py-2 text-xs text-amber-300">
+              Não encontrei a etapa de “pronto” no fluxo — as peças produzidas ficam em zero. Em
+              Admin → Fluxo, a etapa final de Pedidos precisa ter “pronto” no nome, e a de Canecas,
+              “conferindo” ou “embalando”.
+            </p>
+          )}
+          {stats.semFicha > 0 && (
+            <p className="rounded-lg border border-amber-900/60 bg-amber-950/25 px-3 py-2 text-xs text-amber-300">
+              {stats.semFicha} pedido(s) concluído(s) sem ficha técnica — as peças deles não entram
+              na contagem.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Metas por etapa (hoje) */}
-      {stats.metasEtapas.length > 0 && (
+      <Abas
+        abas={[
+          { id: 'hoje', label: 'Hoje' },
+          { id: 'pedidos', label: 'Pedidos' },
+          { id: 'equipe', label: 'Equipe' },
+          { id: 'atividade', label: 'Atividade' },
+        ]}
+        ativa={aba}
+        onMudar={setAba}
+      />
+
+      {aba === 'hoje' && (
+        <div className="space-y-4">
+        {/* Quanto foi cortado, prensado, costurado… hoje */}
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold">Metas por etapa (hoje)</h2>
-          <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-            {stats.metasEtapas.map(({ etapa, meta, feitas, pct }) => (
-              <div key={etapa.id}>
-                <div className="mb-1 flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 font-medium text-slate-300">
-                    <span className="h-2 w-2 rounded-full" style={{ background: etapa.cor }} />
-                    {etapa.nome}
-                  </span>
-                  <span className={pct >= 100 ? 'font-semibold text-emerald-400' : 'text-slate-400'}>
-                    {feitas}/{meta} ({pct}%){pct >= 100 && ' ✓'}
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${Math.min(100, pct)}%`, background: etapa.cor }}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">Peças por etapa hoje</h2>
+              <p className="text-[11px] text-slate-500">
+                inclui a etapa que o pedido pulou ao ir direto para a frente
+              </p>
+            </div>
+            <div className="flex gap-4 text-xs">
+              <span className="text-slate-500">
+                Artes prontas <span className="font-bold text-fuchsia-400">{stats.artesHoje}</span>
+              </span>
+              <span className="text-slate-500">
+                Canecas hoje <span className="font-bold text-orange-400">{stats.canecasHoje}</span>
+              </span>
+            </div>
+          </div>
+          {stats.pecasPorEtapaHoje.length === 0 && (
+            <p className="py-4 text-center text-xs text-slate-500">
+              Nenhuma etapa marcada para contar peças. Marque em Admin → Fluxo.
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {stats.pecasPorEtapaHoje.map((e) => (
+              <div key={e.nome} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                {/* a cor da etapa vem num ponto, não numa tarja na lateral */}
+                <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span
+                    aria-hidden="true"
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: e.cor }}
                   />
-                </div>
+                  <span className="truncate">{e.nome}</span>
+                </p>
+                <p className={`mt-1 text-xl font-bold ${e.pecas > 0 ? 'text-sky-400' : 'text-slate-600'}`}>
+                  {e.pecas}
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  {e.pedidos} {e.pedidos === 1 ? 'pedido' : 'pedidos'}
+                </p>
               </div>
             ))}
           </div>
         </div>
+        {/* Barra de progresso da meta */}
+        {stats.metaQtd > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <div className="mb-2 flex items-center justify-between text-sm">
+              <span className="font-medium">Progresso da meta de hoje</span>
+              <span className="text-slate-400">{stats.pctMeta}%</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-red-700 to-red-400 transition-all"
+                style={{ width: `${Math.min(100, stats.pctMeta ?? 0)}%` }}
+              />
+            </div>
+          </div>
+        )}
+        {/* Metas por etapa (hoje) */}
+        {stats.metasEtapas.length > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <h2 className="mb-3 text-sm font-semibold">Metas por etapa (hoje)</h2>
+            <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              {stats.metasEtapas.map(({ etapa, meta, feitas, pct }) => (
+                <div key={etapa.id}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 font-medium text-slate-300">
+                      <span className="h-2 w-2 rounded-full" style={{ background: etapa.cor }} />
+                      {etapa.nome}
+                    </span>
+                    <span className={pct >= 100 ? 'font-semibold text-emerald-400' : 'text-slate-400'}>
+                      {feitas}/{meta} ({pct}%){pct >= 100 && ' ✓'}
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, pct)}%`, background: etapa.cor }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Pedidos por etapa */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold">Pedidos em cada etapa</h2>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.porEtapa} margin={{ top: 5, right: 5, bottom: 5, left: -25 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
-                <XAxis
-                  dataKey="nome"
-                  tick={{ fill: '#94a3b8', fontSize: 10 }}
-                  interval={0}
-                  angle={-30}
-                  textAnchor="end"
-                  height={60}
-                />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
-                  labelStyle={{ color: '#e2e8f0' }}
-                  cursor={{ fill: '#1a2455' }}
-                />
-                <Bar dataKey="qtd" name="Pedidos" radius={[6, 6, 0, 0]}>
-                  {stats.porEtapa.map((e, i) => (
-                    <Cell key={i} fill={e.cor} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+      {aba === 'pedidos' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Pedidos por etapa */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <h2 className="mb-3 text-sm font-semibold">Pedidos em cada etapa</h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.porEtapa} margin={{ top: 5, right: 5, bottom: 5, left: -25 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1a2455" />
+                  <XAxis
+                    dataKey="nome"
+                    tick={{ fill: '#94a3b8', fontSize: 10 }}
+                    interval={0}
+                    angle={-30}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#0b1233', border: '1px solid #2a3670', borderRadius: 8 }}
+                    labelStyle={{ color: '#e2e8f0' }}
+                    cursor={{ fill: '#1a2455' }}
+                  />
+                  <Bar dataKey="qtd" name="Pedidos" radius={[6, 6, 0, 0]}>
+                    {stats.porEtapa.map((e, i) => (
+                      <Cell key={i} fill={e.cor} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          {/* Indicadores */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <h2 className="mb-3 text-sm font-semibold">Indicadores</h2>
+            <dl className="space-y-3 text-sm">
+              {/* Média de TODOS os pedidos já entregues. O Relatórios mostra a
+                  mesma conta só dos entregues no período escolhido, então os
+                  dois números divergem de propósito — o rótulo diz qual é qual. */}
+              <div className="flex items-start justify-between gap-2">
+                <dt className="text-slate-400">
+                  Tempo médio de produção
+                  <span className="block text-xs text-slate-500">
+                    criação → entrega, em dias úteis · histórico completo
+                  </span>
+                </dt>
+                <dd className="font-semibold">{formatarDuracao(stats.tempoMedioProducao)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-400">Total de pedidos</dt>
+                <dd className="font-semibold">{pedidos.length}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-400">Concluídos (total)</dt>
+                <dd className="font-semibold">{pedidos.filter((p) => p.status === 'concluido').length}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-400">Movimentações hoje</dt>
+                <dd className="font-semibold">{historicoHoje.length}</dd>
+              </div>
+            </dl>
           </div>
         </div>
+      )}
 
-        {/* Produção por funcionário */}
+      {aba === 'equipe' && (
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <h2 className="mb-3 text-sm font-semibold">
             Produção por funcionário (hoje)
@@ -489,41 +560,9 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-      </div>
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* Indicadores */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold">Indicadores</h2>
-          <dl className="space-y-3 text-sm">
-            {/* Média de TODOS os pedidos já entregues. O Relatórios mostra a
-                mesma conta só dos entregues no período escolhido, então os
-                dois números divergem de propósito — o rótulo diz qual é qual. */}
-            <div className="flex items-start justify-between gap-2">
-              <dt className="text-slate-400">
-                Tempo médio de produção
-                <span className="block text-xs text-slate-500">
-                  criação → entrega, em dias úteis · histórico completo
-                </span>
-              </dt>
-              <dd className="font-semibold">{formatarDuracao(stats.tempoMedioProducao)}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-400">Total de pedidos</dt>
-              <dd className="font-semibold">{pedidos.length}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-400">Concluídos (total)</dt>
-              <dd className="font-semibold">{pedidos.filter((p) => p.status === 'concluido').length}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-400">Movimentações hoje</dt>
-              <dd className="font-semibold">{historicoHoje.length}</dd>
-            </div>
-          </dl>
-        </div>
-
-        {/* Linha do tempo */}
+      {aba === 'atividade' && (
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 lg:col-span-2">
           <h2 className="mb-3 text-sm font-semibold">Linha do tempo da produção</h2>
           {eventos.length === 0 ? (
@@ -579,7 +618,7 @@ export default function Dashboard() {
             </ol>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
