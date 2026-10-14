@@ -134,6 +134,9 @@ export default function Relatorios() {
   const [listaAberta, setListaAberta] = useState<
     'iniciados' | 'concluidos' | 'emAndamento' | 'atrasados' | 'cancelados' | 'arquivados' | null
   >(null)
+  // o resumo mostra quantas peças estão em produção; clicando, abre em quais
+  // etapas elas estão
+  const [verEtapasEmProducao, setVerEtapasEmProducao] = useState(false)
 
   useEffect(() => {
     const faixa = faixaDoPeriodo(periodo, mes)
@@ -251,6 +254,17 @@ export default function Relatorios() {
     const porPedido = pecasPorPedido(fichas)
     const pecasEntregues = somarPecas(concluidos, porPedido)
     const pecasEmAndamento = somarPecas(emAndamento, porPedido)
+    // Onde essas peças estão paradas agora: a soma das fichas dos pedidos em
+    // andamento, separada pela etapa em que cada pedido está.
+    const somaPorEtapa = new Map<string, number>()
+    for (const p of emAndamento) {
+      const qtd = porPedido.get(p.id) ?? 0
+      if (qtd === 0 || !p.etapa_atual_id) continue
+      somaPorEtapa.set(p.etapa_atual_id, (somaPorEtapa.get(p.etapa_atual_id) ?? 0) + qtd)
+    }
+    const emProducaoPorEtapa = etapas
+      .filter((e) => (somaPorEtapa.get(e.id) ?? 0) > 0)
+      .map((e) => ({ id: e.id, nome: e.nome, cor: e.cor, pecas: somaPorEtapa.get(e.id)! }))
 
     // PRODUZIDAS: peças que ficaram PRONTAS no período, mesmo que a
     // entrega só aconteça depois. Pedido pronto em setembro e retirado em
@@ -513,6 +527,7 @@ export default function Relatorios() {
       pedidosProduzidos: produzidas.pedidos,
       semEtapaPronto,
       pecasEmAndamento,
+      emProducaoPorEtapa,
       artesCriadas,
       canecasProduzidas,
       pedidosSemFicha,
@@ -769,8 +784,10 @@ export default function Relatorios() {
                   <Celula
                     rotulo="Peças em produção"
                     valor={rel.pecasEmAndamento}
-                    detalhe="pedidos ainda em andamento"
+                    detalhe="toque para ver por etapa"
                     cor="text-amber-400"
+                    aberta={verEtapasEmProducao}
+                    onClick={() => setVerEtapasEmProducao((v) => !v)}
                   />
                   <Celula
                     rotulo="Artes criadas"
@@ -825,6 +842,36 @@ export default function Relatorios() {
                     }
                   />
                 </div>
+
+                {/* Peças em produção abertas por etapa: nome e quantidade, nada mais */}
+                {verEtapasEmProducao && (
+                  <div className="border-t border-slate-800 bg-slate-900 px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Peças em produção por etapa
+                    </p>
+                    {rel.emProducaoPorEtapa.length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Nenhum pedido em andamento com ficha técnica.
+                      </p>
+                    ) : (
+                      <ul className="mt-2 divide-y divide-slate-800">
+                        {rel.emProducaoPorEtapa.map((e) => (
+                          <li key={e.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                            <span className="flex min-w-0 items-center gap-2 text-slate-300">
+                              <span
+                                aria-hidden="true"
+                                className="size-2 shrink-0 rounded-full"
+                                style={{ backgroundColor: e.cor }}
+                              />
+                              <span className="truncate">{e.nome}</span>
+                            </span>
+                            <span className="font-bold tabular-nums text-amber-400">{e.pecas}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </section>
 
             {/* Evolução */}
